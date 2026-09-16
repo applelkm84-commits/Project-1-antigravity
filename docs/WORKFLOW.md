@@ -16,8 +16,20 @@ The Builder makes the smallest safe change set. Unrelated cleanup should be defe
 ### 4. Review
 The Reviewer checks the implementation independently. Review should focus on concrete failures, regressions, security issues, missing tests, or instruction violations rather than stylistic churn.
 
-### 5. Finish
-The Finisher runs the relevant checks, updates documentation, records completion notes, and marks the task complete.
+### 5. Verify
+Run the relevant checks outside Antigravity, then record what actually happened:
+
+```bash
+pytest -q
+antigravity verify <task-id> "pytest -q" --result passed --note "12 tests passed"
+```
+
+Antigravity never executes the check itself. A verification record stores the check name, `passed` / `failed` / `skipped` result, timestamp, and optional note in machine-readable task state and mirrors it into the task Markdown.
+
+This separation prevents an agent from confusing a proposed command with a command that was actually run.
+
+### 6. Finish
+The Finisher updates documentation, records completion notes, checks the recorded verification evidence, and marks the task complete.
 
 ## When to ask a human
 Ask only when at least one of these is true:
@@ -41,6 +53,26 @@ Next: <next action + role>
 ```
 
 This prevents token-heavy transcript replay.
+
+## Verification records
+Verification records answer a narrow question: **what check was actually performed, and what was the result?**
+
+Example state fragment:
+
+```json
+{
+  "verifications": [
+    {
+      "check": "pytest -q",
+      "result": "passed",
+      "created_at": "2026-09-17T00:00:00+00:00",
+      "note": "12 tests passed"
+    }
+  ]
+}
+```
+
+Use `failed` for a check that ran and failed, and `skipped` when a planned check was intentionally not performed. Do not record `passed` for a command that was only suggested or assumed.
 
 ## Failure handling
 
