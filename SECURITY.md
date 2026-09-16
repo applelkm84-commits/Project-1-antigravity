@@ -14,6 +14,19 @@ Useful reports include the affected version, reproduction conditions, impact, an
 
 Antigravity is designed to remain local and file-based. The core CLI should not require network access, collect telemetry, execute generated shell commands, or read credentials. Changes that alter these properties require explicit documentation and review.
 
+## Release proof is evidence, not a certificate
+
+`antigravity-proof` aggregates existing local state and Git evidence into review artifacts. A green proof does not certify that code is correct, secure, authorized, or safe to deploy.
+
+- proof digests are hashes for change detection, not signatures or identity proofs;
+- verification freshness detects recorded/contextual drift and later local-file changes that Antigravity can observe, but cannot prove no unseen environment change occurred;
+- counterfactual prompts propose hypotheses and required observations; they must not invent results;
+- reproduction recipes intentionally omit assumption values and redact common credential/token patterns, but redaction is defense in depth rather than a general-purpose secret scanner;
+- proof JSON/Markdown may still contain project-sensitive non-secret metadata, paths, issue references, decisions, or notes, so review artifacts should be shared according to the repository's own disclosure rules;
+- release readiness is a governance signal and never bypasses provider, organizational, repository, or human approval requirements.
+
+Keep credentials out of task descriptions, comments, Git history, verification notes, and assumption values whenever possible instead of depending on downstream redaction.
+
 ## Guard policies are audit signals, not file permissions
 
 `antigravity-guard` records assumption freshness, invariants, and expected change scope, then compares those records with the local Git working tree.
