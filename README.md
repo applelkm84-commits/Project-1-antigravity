@@ -2,7 +2,7 @@
 
 A lightweight, file-based multi-agent workflow for Codex and other coding agents.
 
-Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, and compact role-specific prompts. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
+Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, compact role-specific prompts, and opt-in GitHub issue/PR handoffs. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
 
 ## Why
 
@@ -132,6 +132,20 @@ Available roles are `orchestrator`, `researcher`, `builder`, `reviewer`, and `fi
 
 The command **does not invoke Codex**, require credentials, or add a network dependency. It produces plain text that can be pasted or passed into the coding-agent workflow you already use.
 
+### Optional GitHub issue / PR handoffs
+
+The core remains network-free. GitHub support is provided by a separate opt-in command that uses an already authenticated GitHub CLI (`gh`):
+
+```bash
+gh auth status
+antigravity-github import-issue owner/repo 42
+antigravity-github pr-handoff <task-id> --output pr-body.md
+```
+
+`import-issue` turns an issue into a normal local task while preserving its source URL, number, labels, and original body. `pr-handoff` generates a reviewable PR description from local task state; it does **not** push, open, or merge a pull request.
+
+See [`docs/GITHUB.md`](docs/GITHUB.md) for the integration and security boundary.
+
 ### Inspect state
 
 ```bash
@@ -147,9 +161,10 @@ planned    <task-id>  Build adapter  blocked=<dependency-id> reviews=1 checks=2/
 ## Repository structure
 
 ```text
-src/antigravity/        Python CLI
+src/antigravity/        Core CLI + optional integration modules
 AGENTS.example.md       Agent governance template
 docs/WORKFLOW.md        Workflow and handoff protocol
+docs/GITHUB.md          Opt-in GitHub integration boundary
 templates/TASK.md       Human-readable task template
 examples/               Example task briefs
 tests/                  Unit tests
@@ -162,7 +177,8 @@ tests/                  Unit tests
 - low ceremony and low token overhead;
 - human-readable state;
 - compatible with existing project instructions;
-- safe defaults without turning every action into an approval checkpoint.
+- safe defaults without turning every action into an approval checkpoint;
+- network integrations remain explicit and optional.
 
 ## Non-goals
 

@@ -14,8 +14,15 @@
 
 ## 0.3 — Portable integrations
 - [x] Optional Codex-ready prompt helper
-- [ ] GitHub issue/PR adapters without changing the local-first core
+- [x] GitHub issue/PR adapter without changing the local-first core
 - [x] Import/export for task briefs
+
+## 0.4 — Coordination receipts
+- [ ] Durable decisions so agents do not reopen settled choices
+- [ ] Scoped approval receipts so already-approved actions are not repeatedly re-confirmed
+- [ ] Expiring task leases to reduce concurrent-agent collisions
+- [ ] Context fingerprints to detect stale prompts after task state changes
+- [ ] Reality check for evidence debt before finishing a task
 
 ## Principles
 Roadmap items must preserve Antigravity's local-first, low-dependency design. Networked integrations should remain optional and must never require users to expose private prompts, source code, or credentials to the core CLI.
