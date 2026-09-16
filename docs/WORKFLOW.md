@@ -49,6 +49,20 @@ This separation prevents an agent from confusing a proposed command with a comma
 ### 7. Finish
 The Finisher updates documentation, records completion notes, checks the recorded verification evidence, and marks the task complete.
 
+## Portable task handoffs
+When a task needs to move between repositories or teams, export a task bundle rather than copying disconnected snippets:
+
+```bash
+antigravity export-task <task-id> --output task.bundle.json
+antigravity --root ../destination import-task task.bundle.json
+```
+
+A version-1 bundle contains the machine-readable task state plus the complete human-readable Markdown task brief. Import preserves reviews, verification evidence, dependencies, status, and timestamps.
+
+For safety, import does not trust the task path stored in the bundle. It validates the task ID and always rewrites the destination under `.antigravity/tasks/<task-id>.md`. Duplicate task IDs and unsupported bundle schema versions fail clearly rather than overwriting local state.
+
+Bundles are plain JSON and do not trigger network access or execute commands.
+
 ## When to ask a human
 Ask only when at least one of these is true:
 
