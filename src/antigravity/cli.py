@@ -100,6 +100,9 @@ def render_task(title: str, task_id: str, constraints: list[str], acceptance: li
 ## Handoffs
 Record only decisions, evidence, changed files, risks, and the next action.
 
+## Review findings
+None recorded.
+
 ## Verification
 - [ ] Relevant tests/checks executed
 - [ ] Acceptance criteria reviewed
@@ -108,6 +111,13 @@ Record only decisions, evidence, changed files, risks, and the next action.
 ## Completion notes
 Pending.
 """
+
+
+def find_task(state: dict, task_id: str) -> dict:
+    for task in state.get("tasks", []):
+        if task.get("id") == task_id:
+            return task
+    raise SystemExit(f"Unknown task id: {task_id}")
 
 
 def create_task(root: Path, title: str, constraints: list[str], acceptance: list[str]) -> Path:
@@ -127,6 +137,7 @@ def create_task(root: Path, title: str, constraints: list[str], acceptance: list
             "status": "planned",
             "path": relative.as_posix(),
             "created_at": created.replace(microsecond=0).isoformat(),
+            "reviews": [],
         }
     )
     save_state(root, state)
@@ -134,23 +145,49 @@ def create_task(root: Path, title: str, constraints: list[str], acceptance: list
     return path
 
 
+def record_review(root: Path, task_id: str, severity: str, finding: str, path_ref: str | None) -> None:
+    state = load_state(root)
+    task = find_task(state, task_id)
+    review = {
+        "severity": severity,
+        "finding": finding,
+        "created_at": utc_now(),
+    }
+    if path_ref:
+        review["path"] = path_ref
+    task.setdefault("reviews", []).append(review)
+    save_state(root, state)
+
+    task_path = root / task["path"]
+    if task_path.exists():
+        text = task_path.read_text(encoding="utf-8")
+        location = f" ({path_ref})" if path_ref else ""
+        line = f"- **{severity.upper()}**{location}: {finding}"
+        empty_marker = "## Review findings\nNone recorded."
+        if empty_marker in text:
+            text = text.replace(empty_marker, f"## Review findings\n{line}", 1)
+        elif "## Review findings\n" in text and "\n\n## Verification" in text:
+            text = text.replace("\n\n## Verification", f"\n{line}\n\n## Verification", 1)
+        else:
+            text = text.replace("## Verification", f"## Review findings\n{line}\n\n## Verification", 1)
+        task_path.write_text(text, encoding="utf-8")
+    print(f"Recorded {severity} finding for {task_id}")
+
+
 def complete_task(root: Path, task_id: str, note: str | None) -> None:
     state = load_state(root)
-    for task in state.get("tasks", []):
-        if task.get("id") == task_id:
-            task["status"] = "complete"
-            task["completed_at"] = utc_now()
-            task_path = root / task["path"]
-            if task_path.exists():
-                text = task_path.read_text(encoding="utf-8")
-                text = text.replace("**Status:** planned", "**Status:** complete", 1)
-                completion = note or "Task marked complete after verification."
-                text = text.replace("## Completion notes\nPending.", f"## Completion notes\n{completion}", 1)
-                task_path.write_text(text, encoding="utf-8")
-            save_state(root, state)
-            print(f"Completed {task_id}")
-            return
-    raise SystemExit(f"Unknown task id: {task_id}")
+    task = find_task(state, task_id)
+    task["status"] = "complete"
+    task["completed_at"] = utc_now()
+    task_path = root / task["path"]
+    if task_path.exists():
+        text = task_path.read_text(encoding="utf-8")
+        text = text.replace("**Status:** planned", "**Status:** complete", 1)
+        completion = note or "Task marked complete after verification."
+        text = text.replace("## Completion notes\nPending.", f"## Completion notes\n{completion}", 1)
+        task_path.write_text(text, encoding="utf-8")
+    save_state(root, state)
+    print(f"Completed {task_id}")
 
 
 def show_status(root: Path) -> None:
@@ -160,7 +197,9 @@ def show_status(root: Path) -> None:
         print("No tasks recorded.")
         return
     for task in tasks:
-        print(f"{task['status']:<10} {task['id']}  {task['title']}")
+        reviews = len(task.get("reviews", []))
+        suffix = f"  reviews={reviews}" if reviews else ""
+        print(f"{task['status']:<10} {task['id']}  {task['title']}{suffix}")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -174,6 +213,12 @@ def parser() -> argparse.ArgumentParser:
     task.add_argument("title")
     task.add_argument("--constraint", action="append", default=[], help="Constraint; repeatable")
     task.add_argument("--accept", action="append", default=[], help="Acceptance criterion; repeatable")
+
+    review = sub.add_parser("review", help="Record a structured review finding")
+    review.add_argument("task_id")
+    review.add_argument("finding")
+    review.add_argument("--severity", choices=["info", "warning", "error"], default="warning")
+    review.add_argument("--path", dest="path_ref", help="Optional file/path reference")
 
     sub.add_parser("status", help="Show recorded task state")
 
@@ -190,6 +235,8 @@ def main(argv: list[str] | None = None) -> None:
         init_repo(root)
     elif args.command == "task":
         create_task(root, args.title, args.constraint, args.accept)
+    elif args.command == "review":
+        record_review(root, args.task_id, args.severity, args.finding, args.path_ref)
     elif args.command == "status":
         show_status(root)
     elif args.command == "complete":

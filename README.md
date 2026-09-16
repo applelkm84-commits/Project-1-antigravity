@@ -73,6 +73,16 @@ antigravity task "Fix mobile navigation overlap" \
   --accept "Existing tests pass"
 ```
 
+### Record a review finding
+
+```bash
+antigravity review <task-id> "Add a regression check" \
+  --severity warning \
+  --path src/navigation.css
+```
+
+Review findings are stored in both the task state and the human-readable task brief.
+
 ### Inspect state
 
 ```bash
