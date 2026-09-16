@@ -13,7 +13,7 @@
 - [x] Task dependency metadata
 
 ## 0.3 — Portable integrations
-- [ ] Optional Codex CLI helper commands
+- [x] Optional Codex-ready prompt helper
 - [ ] GitHub issue/PR adapters without changing the local-first core
 - [x] Import/export for task briefs
 

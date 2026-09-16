@@ -11,6 +11,35 @@ STATE_FILE = "state.json"
 TASK_DIR = "tasks"
 BUNDLE_SCHEMA_VERSION = 1
 SAFE_TASK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+ROLES = ("orchestrator", "researcher", "builder", "reviewer", "finisher")
+
+ROLE_INSTRUCTIONS = {
+    "orchestrator": [
+        "Confirm the objective, constraints, acceptance criteria, and current readiness.",
+        "Route only material unknowns to research and avoid unnecessary approval loops.",
+        "Keep the next handoff compact: decisions, evidence, risks, and next owner.",
+    ],
+    "researcher": [
+        "Resolve only unknowns that can materially change implementation.",
+        "Record evidence and conclusions without silently modifying product code.",
+        "End with the minimum facts the Builder or Orchestrator needs next.",
+    ],
+    "builder": [
+        "Implement the smallest safe change that satisfies the acceptance criteria.",
+        "Preserve unrelated behavior and existing project conventions.",
+        "Do not claim verification that was not actually run and recorded.",
+    ],
+    "reviewer": [
+        "Review independently for correctness, regressions, security, and instruction compliance.",
+        "Prefer concrete findings with file/path references over stylistic churn.",
+        "Separate verified failures from suggestions and unresolved questions.",
+    ],
+    "finisher": [
+        "Check the recorded verification evidence and unresolved review findings.",
+        "Update documentation when public behavior changed.",
+        "Report changed files, checks actually run, remaining risks, and completion status.",
+    ],
+}
 
 AGENT_POLICY = """# AGENTS.md
 
@@ -322,6 +351,82 @@ def import_task(root: Path, source: Path) -> Path:
     return path
 
 
+def markdown_section(markdown: str, heading: str) -> str:
+    pattern = re.compile(
+        rf"^## {re.escape(heading)}\s*\n(.*?)(?=^##\s+|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    match = pattern.search(markdown)
+    return match.group(1).strip() if match else ""
+
+
+def codex_prompt(root: Path, task_id: str, role: str, output: Path | None) -> str:
+    if role not in ROLE_INSTRUCTIONS:
+        raise SystemExit(f"Unknown role: {role}")
+    state = load_state(root)
+    task = find_task(state, task_id)
+    task_path = root / task["path"]
+    if not task_path.exists():
+        raise SystemExit(f"Task Markdown is missing: {task['path']}")
+    markdown = task_path.read_text(encoding="utf-8")
+    task_by_id = {item.get("id"): item for item in state.get("tasks", []) if item.get("id")}
+    readiness = readiness_label(task, task_by_id, dependency_cycle_ids(state.get("tasks", []))) or "complete"
+
+    objective = markdown_section(markdown, "Objective") or task.get("title", "")
+    constraints = markdown_section(markdown, "Constraints") or "- None recorded"
+    acceptance = markdown_section(markdown, "Acceptance criteria") or "- None recorded"
+    dependencies = markdown_section(markdown, "Dependencies") or "- None"
+    reviews = markdown_section(markdown, "Review findings") or "None recorded."
+    verifications = markdown_section(markdown, "Verification records") or "None recorded."
+    role_lines = "\n".join(f"- {item}" for item in ROLE_INSTRUCTIONS[role])
+
+    prompt = f"""# Antigravity task context
+
+Role: {role}
+Task ID: {task_id}
+Title: {task.get('title', '')}
+Status: {task.get('status', 'planned')}
+Readiness: {readiness}
+
+## Objective
+{objective}
+
+## Constraints
+{constraints}
+
+## Acceptance criteria
+{acceptance}
+
+## Dependencies
+{dependencies}
+
+## Current review findings
+{reviews}
+
+## Recorded verification evidence
+{verifications}
+
+## Role instructions
+{role_lines}
+
+## Required handoff
+Return a compact handoff using exactly these fields:
+Result: <decision or completed work>
+Evidence/changes: <facts, files, checks actually run>
+Risk/blocker: <only if present; otherwise None>
+Next: <next action and role>
+
+Do not invent repository state, test results, approvals, or evidence. Do not replay the full conversation.
+"""
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(prompt, encoding="utf-8")
+        print(output)
+    else:
+        print(prompt, end="")
+    return prompt
+
+
 def complete_task(root: Path, task_id: str, note: str | None) -> None:
     state = load_state(root)
     task = find_task(state, task_id)
@@ -397,6 +502,11 @@ def parser() -> argparse.ArgumentParser:
     import_cmd = sub.add_parser("import-task", help="Import a portable JSON task bundle")
     import_cmd.add_argument("source", type=Path)
 
+    codex = sub.add_parser("codex-prompt", help="Generate a compact role-specific prompt from task state")
+    codex.add_argument("task_id")
+    codex.add_argument("--role", choices=ROLES, required=True)
+    codex.add_argument("--output", type=Path, help="Write prompt to this path instead of stdout")
+
     sub.add_parser("status", help="Show recorded task state")
 
     complete = sub.add_parser("complete", help="Mark a task complete")
@@ -420,6 +530,8 @@ def main(argv: list[str] | None = None) -> None:
         export_task(root, args.task_id, args.output)
     elif args.command == "import-task":
         import_task(root, args.source)
+    elif args.command == "codex-prompt":
+        codex_prompt(root, args.task_id, args.role, args.output)
     elif args.command == "status":
         show_status(root)
     elif args.command == "complete":

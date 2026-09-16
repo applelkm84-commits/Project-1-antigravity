@@ -49,6 +49,20 @@ This separation prevents an agent from confusing a proposed command with a comma
 ### 7. Finish
 The Finisher updates documentation, records completion notes, checks the recorded verification evidence, and marks the task complete.
 
+## Codex-ready role handoffs
+Use `codex-prompt` when a coding agent needs the durable task context without receiving the full conversation history:
+
+```bash
+antigravity codex-prompt <task-id> --role builder
+antigravity codex-prompt <task-id> --role reviewer --output reviewer-prompt.md
+```
+
+The generated prompt contains the objective, constraints, acceptance criteria, dependency readiness, current review findings, recorded verification evidence, role-specific instructions, and a fixed compact handoff format.
+
+Available roles mirror the Antigravity workflow: `orchestrator`, `researcher`, `builder`, `reviewer`, and `finisher`. The helper only generates text. It does not invoke Codex, contact an API, read credentials, or claim that any generated instruction was executed.
+
+This makes the prompt a portable interface between task state and a coding-agent session while keeping the repository as the source of truth.
+
 ## Portable task handoffs
 When a task needs to move between repositories or teams, export a task bundle rather than copying disconnected snippets:
 

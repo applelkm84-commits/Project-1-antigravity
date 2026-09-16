@@ -2,7 +2,7 @@
 
 A lightweight, file-based multi-agent workflow for Codex and other coding agents.
 
-Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, and a repeatable definition of done. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
+Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, and compact role-specific prompts. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
 
 ## Why
 
@@ -118,6 +118,19 @@ antigravity --root ../another-repo import-task task.bundle.json
 ```
 
 Imports reject unsupported bundle schemas, duplicate task IDs, and unsafe IDs that could escape `.antigravity/tasks/`. Imported task paths are always rewritten inside the destination repository.
+
+### Generate a Codex-ready prompt
+
+Generate a compact prompt from the durable task state instead of replaying a chat transcript:
+
+```bash
+antigravity codex-prompt <task-id> --role builder
+antigravity codex-prompt <task-id> --role reviewer --output reviewer-prompt.md
+```
+
+Available roles are `orchestrator`, `researcher`, `builder`, `reviewer`, and `finisher`. The prompt includes only the task objective, constraints, acceptance criteria, dependency readiness, current review findings, verification evidence, role-specific instructions, and the required handoff format.
+
+The command **does not invoke Codex**, require credentials, or add a network dependency. It produces plain text that can be pasted or passed into the coding-agent workflow you already use.
 
 ### Inspect state
 
