@@ -34,11 +34,21 @@ def test_create_review_and_complete_task(tmp_path: Path):
         "Add a regression check for the 320px layout.",
         "src/navigation.css",
     )
+    record_review(
+        tmp_path,
+        task["id"],
+        "info",
+        "Document the responsive breakpoint.",
+        None,
+    )
     state = load_state(tmp_path)
+    assert len(state["tasks"][0]["reviews"]) == 2
     assert state["tasks"][0]["reviews"][0]["severity"] == "warning"
     text = task_path.read_text(encoding="utf-8")
+    assert text.count("## Review findings") == 1
     assert "src/navigation.css" in text
     assert "Add a regression check" in text
+    assert "Document the responsive breakpoint" in text
 
     complete_task(tmp_path, task["id"], "Verified with responsive checks.")
     state = json.loads((tmp_path / ".antigravity" / "state.json").read_text(encoding="utf-8"))
