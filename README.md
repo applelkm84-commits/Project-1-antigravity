@@ -2,7 +2,7 @@
 
 A lightweight, file-based multi-agent workflow for Codex and other coding agents.
 
-Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, approval gates, durable task state, and a repeatable definition of done. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
+Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, and a repeatable definition of done. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
 
 ## Why
 
@@ -13,7 +13,7 @@ Agent workflows often fail for predictable reasons:
 - agents ask for unnecessary confirmations;
 - important constraints disappear between turns;
 - token usage grows because the same context is repeated;
-- there is no durable record of what is done, blocked, or approved.
+- there is no durable record of what is done, blocked, or actually verified.
 
 Antigravity uses repository files as the control plane so humans and agents can inspect the same source of truth.
 
@@ -30,7 +30,7 @@ Antigravity uses repository files as the control plane so humans and agents can 
 ```bash
 python -m pip install -e .
 antigravity init
-antigravity task "Add a responsive pricing section"
+antigravity task "Prepare API schema"
 ```
 
 `antigravity init` creates:
@@ -42,7 +42,7 @@ AGENTS.md
   tasks/
 ```
 
-A task command creates a durable task brief containing objective, constraints, acceptance criteria, plan, handoffs, review findings, verification records, and completion state.
+A task command creates a durable task brief containing objective, constraints, acceptance criteria, dependencies, handoffs, review findings, verification records, and completion state.
 
 ## Operating model
 
@@ -73,6 +73,18 @@ antigravity task "Fix mobile navigation overlap" \
   --accept "Existing tests pass"
 ```
 
+### Add task dependencies
+
+Use repeatable `--depends-on` arguments to express prerequisites without turning Antigravity into a scheduler:
+
+```bash
+antigravity task "Build GitHub adapter" \
+  --depends-on 20260917-010000-define-adapter-schema \
+  --depends-on 20260917-011500-add-auth-boundary
+```
+
+`antigravity status` marks incomplete dependency chains as blocked, missing task references as `blocked=missing:<id>`, dependency cycles as `blocked=cycle`, and runnable planned tasks as `ready`.
+
 ### Record a review finding
 
 ```bash
@@ -102,7 +114,11 @@ Supported results are `passed`, `failed`, and `skipped`. Each record stores the 
 antigravity status
 ```
 
-When verification records exist, status includes a compact summary such as `checks=2/3 failed=1`.
+Status combines readiness, review count, and verification summaries, for example:
+
+```text
+planned    <task-id>  Build adapter  blocked=<dependency-id> reviews=1 checks=2/3 failed=1
+```
 
 ## Repository structure
 
@@ -131,6 +147,10 @@ Antigravity is not an autonomous deployment platform, secret manager, permission
 ## Contributing
 
 Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md) for notable project changes.
 
 ## License
 

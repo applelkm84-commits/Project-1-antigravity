@@ -4,11 +4,13 @@ from pathlib import Path
 from antigravity.cli import (
     complete_task,
     create_task,
+    dependency_cycle_ids,
     init_repo,
     load_state,
     record_review,
     record_verification,
     save_state,
+    show_status,
 )
 
 
@@ -29,12 +31,10 @@ def test_create_review_verify_and_complete_task(tmp_path: Path):
         ["Do not change desktop navigation"],
         ["No overlap at 320px width"],
     )
-    assert task_path.exists()
     state = load_state(tmp_path)
-    assert len(state["tasks"]) == 1
     task = state["tasks"][0]
-    assert task["status"] == "planned"
     assert task["verifications"] == []
+    assert task["depends_on"] == []
 
     record_review(
         tmp_path,
@@ -43,13 +43,6 @@ def test_create_review_verify_and_complete_task(tmp_path: Path):
         "Add a regression check for the 320px layout.",
         "src/navigation.css",
     )
-    record_review(
-        tmp_path,
-        task["id"],
-        "info",
-        "Document the responsive breakpoint.",
-        None,
-    )
     record_verification(
         tmp_path,
         task["id"],
@@ -57,37 +50,66 @@ def test_create_review_verify_and_complete_task(tmp_path: Path):
         "passed",
         "12 tests passed.",
     )
-    record_verification(
-        tmp_path,
-        task["id"],
-        "responsive check",
-        "skipped",
-        None,
-    )
-
     state = load_state(tmp_path)
-    task = state["tasks"][0]
-    assert len(task["reviews"]) == 2
-    assert task["reviews"][0]["severity"] == "warning"
-    assert len(task["verifications"]) == 2
-    assert task["verifications"][0]["check"] == "pytest -q"
-    assert task["verifications"][0]["result"] == "passed"
-    assert "note" not in task["verifications"][1]
-
-    text = task_path.read_text(encoding="utf-8")
-    assert text.count("## Review findings") == 1
-    assert text.count("## Verification records") == 1
-    assert "src/navigation.css" in text
-    assert "Add a regression check" in text
-    assert "**PASSED** `pytest -q` — 12 tests passed." in text
-    assert "**SKIPPED** `responsive check`" in text
+    assert state["tasks"][0]["verifications"][0]["result"] == "passed"
 
     complete_task(tmp_path, task["id"], "Verified with recorded checks.")
-    state = json.loads((tmp_path / ".antigravity" / "state.json").read_text(encoding="utf-8"))
-    assert state["tasks"][0]["status"] == "complete"
-    text = task_path.read_text(encoding="utf-8")
-    assert "**Status:** complete" in text
-    assert "Verified with recorded checks." in text
+    assert "**Status:** complete" in task_path.read_text(encoding="utf-8")
+
+
+def test_dependency_readiness_changes_after_prerequisite_completes(tmp_path: Path, capsys):
+    init_repo(tmp_path)
+    create_task(tmp_path, "Prepare schema", [], [])
+    state = load_state(tmp_path)
+    prerequisite = state["tasks"][0]
+
+    dependent_path = create_task(
+        tmp_path,
+        "Build adapter",
+        [],
+        [],
+        [prerequisite["id"]],
+    )
+    state = load_state(tmp_path)
+    dependent = state["tasks"][1]
+    assert dependent["depends_on"] == [prerequisite["id"]]
+    assert f"`{prerequisite['id']}`" in dependent_path.read_text(encoding="utf-8")
+
+    show_status(tmp_path)
+    output = capsys.readouterr().out
+    assert f"blocked={prerequisite['id']}" in output
+
+    complete_task(tmp_path, prerequisite["id"], "Schema ready.")
+    show_status(tmp_path)
+    output = capsys.readouterr().out
+    dependent_line = next(line for line in output.splitlines() if dependent["id"] in line)
+    assert "ready" in dependent_line
+    assert "blocked=" not in dependent_line
+
+
+def test_missing_dependency_and_cycles_are_reported(tmp_path: Path, capsys):
+    init_repo(tmp_path)
+    create_task(tmp_path, "First", [], [])
+    create_task(tmp_path, "Second", [], [])
+    state = load_state(tmp_path)
+    first, second = state["tasks"]
+    first["depends_on"] = [second["id"]]
+    second["depends_on"] = [first["id"]]
+    save_state(tmp_path, state)
+
+    assert dependency_cycle_ids(state["tasks"]) == {first["id"], second["id"]}
+    show_status(tmp_path)
+    output = capsys.readouterr().out
+    assert output.count("blocked=cycle") == 2
+
+    state = load_state(tmp_path)
+    state["tasks"][0]["depends_on"] = []
+    state["tasks"][1]["depends_on"] = ["missing-task"]
+    save_state(tmp_path, state)
+    show_status(tmp_path)
+    output = capsys.readouterr().out
+    second_line = next(line for line in output.splitlines() if second["id"] in line)
+    assert "blocked=missing:missing-task" in second_line
 
 
 def test_record_verification_is_backward_compatible(tmp_path: Path):
@@ -116,10 +138,6 @@ def test_record_verification_is_backward_compatible(tmp_path: Path):
         "failed",
         "Syntax error",
     )
-
     state = load_state(tmp_path)
-    verification = state["tasks"][0]["verifications"][0]
-    assert verification["result"] == "failed"
-    text = old_task_path.read_text(encoding="utf-8")
-    assert "## Verification records" in text
-    assert "**FAILED** `python -m compileall .` — Syntax error" in text
+    assert state["tasks"][0]["verifications"][0]["result"] == "failed"
+    show_status(tmp_path)

@@ -10,7 +10,7 @@
 - [x] Structured reviewer findings
 - [x] `antigravity review` command
 - [x] Machine-readable verification records
-- [ ] Task dependency metadata
+- [x] Task dependency metadata
 
 ## 0.3 — Portable integrations
 - [ ] Optional Codex CLI helper commands
