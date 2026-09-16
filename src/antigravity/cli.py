@@ -163,9 +163,11 @@ def record_review(root: Path, task_id: str, severity: str, finding: str, path_re
         text = task_path.read_text(encoding="utf-8")
         location = f" ({path_ref})" if path_ref else ""
         line = f"- **{severity.upper()}**{location}: {finding}"
-        marker = "## Review findings\nNone recorded."
-        if marker in text:
-            text = text.replace(marker, f"## Review findings\n{line}", 1)
+        empty_marker = "## Review findings\nNone recorded."
+        if empty_marker in text:
+            text = text.replace(empty_marker, f"## Review findings\n{line}", 1)
+        elif "## Review findings\n" in text and "\n\n## Verification" in text:
+            text = text.replace("\n\n## Verification", f"\n{line}\n\n## Verification", 1)
         else:
             text = text.replace("## Verification", f"## Review findings\n{line}\n\n## Verification", 1)
         task_path.write_text(text, encoding="utf-8")
