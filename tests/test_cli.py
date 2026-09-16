@@ -5,6 +5,8 @@ import pytest
 
 from antigravity.cli import (
     BUNDLE_SCHEMA_VERSION,
+    ROLES,
+    codex_prompt,
     complete_task,
     create_task,
     dependency_cycle_ids,
@@ -181,3 +183,40 @@ def test_task_bundle_rejects_unsafe_id_and_unknown_schema(tmp_path: Path):
     )
     with pytest.raises(SystemExit, match="Unsupported task bundle schema"):
         import_task(root, bundle)
+
+
+def test_codex_prompt_is_compact_role_specific_and_file_capable(tmp_path: Path):
+    init_repo(tmp_path)
+    create_task(tmp_path, "Prepare schema", [], [])
+    prerequisite = load_state(tmp_path)["tasks"][0]
+    task_path = create_task(
+        tmp_path,
+        "Build GitHub adapter",
+        ["Do not add runtime network dependencies", "Preserve the local-first core"],
+        ["Adapter has tests", "Existing CLI remains compatible"],
+        [prerequisite["id"]],
+    )
+    task = load_state(tmp_path)["tasks"][1]
+    record_review(tmp_path, task["id"], "warning", "Validate untrusted issue titles.", "src/adapter.py")
+    record_verification(tmp_path, task["id"], "pytest -q", "passed", "8 passed")
+
+    output_path = tmp_path / "builder-prompt.md"
+    prompt = codex_prompt(tmp_path, task["id"], "builder", output_path)
+    assert output_path.read_text(encoding="utf-8") == prompt
+    assert "Role: builder" in prompt
+    assert f"Readiness: blocked={prerequisite['id']}" in prompt
+    assert "Do not add runtime network dependencies" in prompt
+    assert "Adapter has tests" in prompt
+    assert "Validate untrusted issue titles." in prompt
+    assert "**PASSED** `pytest -q` — 8 passed" in prompt
+    assert "Implement the smallest safe change" in prompt
+    assert "## Plan" not in prompt
+    assert "Do not replay the full conversation." in prompt
+    assert task_path.exists()
+
+    reviewer_prompt = codex_prompt(tmp_path, task["id"], "reviewer", None)
+    assert "Role: reviewer" in reviewer_prompt
+    assert "Review independently for correctness" in reviewer_prompt
+    assert "Implement the smallest safe change" not in reviewer_prompt
+
+    assert set(ROLES) == {"orchestrator", "researcher", "builder", "reviewer", "finisher"}
