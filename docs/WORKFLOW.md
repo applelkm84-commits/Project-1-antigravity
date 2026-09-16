@@ -5,18 +5,36 @@ Antigravity is intentionally small. The repository is the coordination layer; ta
 ## Lifecycle
 
 ### 1. Intake
-The Orchestrator converts a request into an objective, constraints, and acceptance criteria. It does not ask for confirmation when the request is already clear.
+The Orchestrator converts a request into an objective, constraints, acceptance criteria, and optional prerequisite task IDs. It does not ask for confirmation when the request is already clear.
 
 ### 2. Resolve material unknowns
 Route to the Researcher only when an unknown can change implementation. Research should end with a compact evidence record and a recommendation for the next action.
 
-### 3. Implement
+### 3. Check readiness
+A planned task with no incomplete prerequisites is `ready`. A task is blocked when a referenced prerequisite is incomplete, missing, or part of a dependency cycle.
+
+Create dependencies with repeatable `--depends-on` arguments:
+
+```bash
+antigravity task "Build adapter" --depends-on <task-id>
+```
+
+`antigravity status` reports:
+
+- `ready` when all known prerequisites are complete;
+- `blocked=<task-id>` when a prerequisite is incomplete;
+- `blocked=missing:<task-id>` when the referenced task does not exist;
+- `blocked=cycle` when the task participates in a dependency cycle.
+
+Dependencies are advisory workflow metadata. Antigravity does not schedule tasks or automatically execute blocked work.
+
+### 4. Implement
 The Builder makes the smallest safe change set. Unrelated cleanup should be deferred unless it is required for correctness.
 
-### 4. Review
+### 5. Review
 The Reviewer checks the implementation independently. Review should focus on concrete failures, regressions, security issues, missing tests, or instruction violations rather than stylistic churn.
 
-### 5. Verify
+### 6. Verify
 Run the relevant checks outside Antigravity, then record what actually happened:
 
 ```bash
@@ -28,7 +46,7 @@ Antigravity never executes the check itself. A verification record stores the ch
 
 This separation prevents an agent from confusing a proposed command with a command that was actually run.
 
-### 6. Finish
+### 7. Finish
 The Finisher updates documentation, records completion notes, checks the recorded verification evidence, and marks the task complete.
 
 ## When to ask a human
