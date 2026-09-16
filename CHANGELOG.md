@@ -2,6 +2,25 @@
 
 All notable changes to Antigravity are documented here.
 
+## 0.5.0 — 2026-09-17
+
+### Added
+- local `antigravity-guard` companion command;
+- keyed assumptions with optional source/evidence metadata and TTL;
+- explicit expired-assumption reporting without silently falling back to older values;
+- protected invariants that survive agent handoffs;
+- per-task change policy with allowed path globs, protected path globs, maximum changed files, and maximum changed lines;
+- local Git blast-radius audit covering tracked and untracked changes while ignoring `.antigravity/` state;
+- non-zero audit exit when protected paths, out-of-scope files, change budgets, or latest-assumption freshness are violated;
+- machine-readable JSON reports and compact guard packets for Builders / Reviewers;
+- temporary-real-Git-repository tests for clean and violating diffs.
+
+### Design guarantees
+- the guard uses local Git only and adds no network/runtime dependency;
+- Git commands use argument lists with `shell=False`;
+- change policies and protected paths are governance/audit signals rather than filesystem permissions;
+- stale assumptions can fail an audit even when the code diff itself is in scope, because implementation evidence is not trustworthy if its external premise expired.
+
 ## 0.4.0 — 2026-09-17
 
 ### Added
