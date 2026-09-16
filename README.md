@@ -1,39 +1,44 @@
 # Antigravity
 
-A lightweight, file-based multi-agent workflow for Codex and other coding agents.
+A lightweight, Git-native operating layer for Codex and other coding agents.
 
-Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, compact role-specific prompts, opt-in GitHub handoffs, coordination receipts, expiring assumptions, protected invariants, and local Git blast-radius audits.
+Antigravity keeps the parts of agentic work that usually disappear between chats in durable repository files: task state, decisions, approvals, leases, dependencies, verification evidence, assumptions, protected invariants, scope budgets, release proof, and compact handoffs.
+
+It is designed for solo builders and small teams that want stronger agent autonomy **without** a hosted orchestration server.
 
 ## Why
 
-Agent workflows often fail for predictable reasons:
+Coding agents often fail in ways that ordinary task lists and CI do not capture:
 
-- every task starts from zero context;
-- planning, implementation, review, and release get mixed together;
-- agents ask for approvals that were already given in another conversation;
+- every new session starts from incomplete context;
+- agents re-ask for approvals that were already granted;
 - two agents can unknowingly work the same task at once;
-- important decisions disappear between turns;
-- a prompt can remain syntactically valid after the underlying task state has changed;
-- an external fact can quietly expire while the implementation still assumes it is current;
-- a small fix can silently grow into a broad refactor touching protected files;
-- there is no durable record of what is done, blocked, approved, assumed, in-scope, or actually verified.
+- a settled decision gets reopened because it lived only in chat;
+- a green test survives even though requirements or assumptions changed afterwards;
+- external facts quietly expire;
+- a small fix grows into a broad refactor while tests still pass;
+- reviewers see a confident summary but cannot reconstruct the evidence behind it;
+- reproduction notes accidentally carry secrets or credentials.
 
-Antigravity uses repository files as the control plane so humans and agents can inspect the same source of truth.
+Antigravity treats the repository as the coordination and evidence layer so humans and agents can inspect the same source of truth.
 
 ## Core roles
 
-1. **Orchestrator** — decomposes work, routes it, and owns completion.
-2. **Researcher** — resolves unknowns and records evidence, without modifying product code.
-3. **Builder** — implements the approved plan with the smallest safe change set.
+1. **Orchestrator** — owns decomposition, routing, and completion.
+2. **Researcher** — resolves only material unknowns and records evidence.
+3. **Builder** — implements the smallest safe change set.
 4. **Reviewer** — checks correctness, regressions, security, and instruction compliance.
-5. **Finisher** — runs final checks, updates documentation, and prepares the handoff/release summary.
+5. **Finisher** — checks actual evidence, updates docs, and prepares the handoff/release state.
 
 ## Quick start
 
 ```bash
 python -m pip install -e .
 antigravity init
-antigravity task "Prepare API schema"
+antigravity task "Fix mobile navigation overlap" \
+  --constraint "Do not change desktop navigation" \
+  --accept "No overlap at 320px width" \
+  --accept "Existing tests pass"
 ```
 
 `antigravity init` creates:
@@ -45,89 +50,49 @@ AGENTS.md
   tasks/
 ```
 
-A task command creates a durable task brief containing objective, constraints, acceptance criteria, dependencies, handoffs, review findings, verification records, and completion state.
-
-## Operating model
-
-Antigravity follows five rules:
-
-- **Act when the request is clear.** Do not ask for confirmation that adds no safety or information value.
-- **Clarify only material ambiguity.** If a reasonable default is reversible, state it and proceed.
-- **Separate roles.** Research does not silently become implementation; review does not rewrite the whole solution.
-- **Use compact handoffs.** Pass decisions, evidence, changed files, risks, and next action — not the entire conversation.
-- **Finish the loop.** A task is not complete until verification and documentation are recorded.
-
-See [`docs/WORKFLOW.md`](docs/WORKFLOW.md) for the full lifecycle and [`AGENTS.example.md`](AGENTS.example.md) for a drop-in repository policy.
-
-## CLI
-
-### Initialize a repository
+## Core task commands
 
 ```bash
-antigravity init
+antigravity task "Build adapter"
+antigravity status
+antigravity review <task-id> "Add a regression check" --severity warning --path src/adapter.py
+antigravity verify <task-id> "pytest -q" --result passed --note "24 tests passed"
+antigravity complete <task-id> --note "Acceptance criteria verified"
 ```
 
-### Create a task
+Antigravity records verification evidence; it does **not** pretend a suggested command ran.
 
-```bash
-antigravity task "Fix mobile navigation overlap" \
-  --constraint "Do not change desktop navigation" \
-  --accept "No overlap at 320px width" \
-  --accept "Existing tests pass"
-```
-
-### Add task dependencies
-
-Use repeatable `--depends-on` arguments to express prerequisites without turning Antigravity into a scheduler:
+### Dependency-aware readiness
 
 ```bash
 antigravity task "Build GitHub adapter" \
-  --depends-on 20260917-010000-define-adapter-schema \
-  --depends-on 20260917-011500-add-auth-boundary
+  --depends-on 20260917-010000-define-schema \
+  --depends-on 20260917-011500-auth-boundary
 ```
 
-`antigravity status` marks incomplete dependency chains as blocked, missing task references as `blocked=missing:<id>`, dependency cycles as `blocked=cycle`, and runnable planned tasks as `ready`.
+`status` reports `ready`, incomplete blockers, missing dependency IDs, and dependency cycles.
 
-### Record a review finding
-
-```bash
-antigravity review <task-id> "Add a regression check" \
-  --severity warning \
-  --path src/navigation.css
-```
-
-### Record a verification result
-
-Antigravity records evidence but does **not** execute the command for you:
-
-```bash
-pytest -q
-antigravity verify <task-id> "pytest -q" \
-  --result passed \
-  --note "12 tests passed"
-```
-
-### Export and import a task brief
+### Portable task bundles
 
 ```bash
 antigravity export-task <task-id> --output task.bundle.json
 antigravity --root ../another-repo import-task task.bundle.json
 ```
 
-Imports reject unsupported bundle schemas, duplicate task IDs, and unsafe IDs that could escape `.antigravity/tasks/`.
+Imports rewrite paths safely under `.antigravity/tasks/` and reject duplicate IDs, unsafe task IDs, and unsupported bundle schemas.
 
-### Generate a Codex-ready prompt
+### Codex-ready prompts
 
 ```bash
 antigravity codex-prompt <task-id> --role builder
 antigravity codex-prompt <task-id> --role reviewer --output reviewer-prompt.md
 ```
 
-The command does not invoke Codex, require credentials, or add a network dependency.
+Prompts carry only durable task context and a compact handoff contract instead of replaying an entire conversation. The helper does not invoke Codex or require credentials.
 
-### Optional GitHub issue / PR handoffs
+## Optional GitHub handoffs
 
-The core remains network-free. GitHub support is provided by a separate opt-in command that uses an already authenticated GitHub CLI (`gh`):
+GitHub support stays outside the network-free core and uses an already authenticated `gh` CLI:
 
 ```bash
 gh auth status
@@ -135,63 +100,58 @@ antigravity-github import-issue owner/repo 42
 antigravity-github pr-handoff <task-id> --output pr-body.md
 ```
 
-See [`docs/GITHUB.md`](docs/GITHUB.md) for the integration and security boundary.
+`import-issue` creates a normal local task with source metadata. `pr-handoff` prepares a reviewable PR description but does not push, open, or merge a pull request.
 
-## Coordination layer: receipts instead of repeated conversation
+See [`docs/GITHUB.md`](docs/GITHUB.md).
 
-The `antigravity-coord` companion command keeps coordination facts durable without turning Antigravity into a server or permissions system.
+## Coordination receipts
 
-### Record settled decisions
+`antigravity-coord` makes decisions and approvals survive chat/session boundaries.
+
+### Settled decisions
 
 ```bash
-antigravity-coord decide <task-id> database sqlite \
-  --reason "Single-user local state"
+antigravity-coord decide <task-id> database sqlite --reason "Single-user local state"
 ```
 
-### Record exact approval scopes
+The newest value for a decision key is active while history remains available.
+
+### Exact-scope approvals
 
 ```bash
 antigravity-coord approve <task-id> "edit source files" --by maintainer
-antigravity-coord approve <task-id> "publish release" \
-  --by maintainer --ttl-minutes 60
+antigravity-coord approve <task-id> "publish release" --by maintainer --ttl-minutes 60
 ```
 
-Approval receipts exist to prevent low-value re-confirmation. They authorize only the exact recorded scope and can expire or be revoked.
+Receipts prevent low-value re-confirmation but authorize only the exact recorded scope. They can expire or be revoked.
 
-### Prevent agent collisions with expiring leases
+### Expiring task leases
 
 ```bash
 antigravity-coord claim <task-id> --owner builder-a --ttl-minutes 30
 antigravity-coord release <task-id> --owner builder-a
 ```
 
-### Detect stale agent context
+A second agent can see that another owner is already working the task instead of racing them unknowingly.
+
+### Context freshness and reality checks
 
 ```bash
 FINGERPRINT=$(antigravity-coord fingerprint <task-id>)
 antigravity-coord check-context <task-id> "$FINGERPRINT"
-```
-
-### Measure evidence debt before saying “done”
-
-```bash
 antigravity-coord reality <task-id>
-antigravity-coord reality <task-id> --json
+antigravity-coord prompt <task-id> --role reviewer
 ```
 
-### Generate a coordination-aware prompt
+The reality report separates actual blockers from evidence debt. Context fingerprints make stale task snapshots detectable before high-impact work.
 
-```bash
-antigravity-coord prompt <task-id> --role builder
-```
+See [`docs/COORDINATION.md`](docs/COORDINATION.md).
 
-See [`docs/COORDINATION.md`](docs/COORDINATION.md) for the full model and limitations.
+## Guard layer: assumptions and blast radius
 
-## Guard layer: stale assumptions and scope creep
+`antigravity-guard` catches two failures tests often miss: a premise went stale, or the implementation changed far more than the task intended.
 
-The `antigravity-guard` companion command makes two otherwise invisible risks explicit: **the facts behind a task may expire**, and **the actual diff may exceed the task's intended blast radius**.
-
-### Record an assumption with evidence and TTL
+### Expiring assumptions
 
 ```bash
 antigravity-guard assume <task-id> vendor-api supports-v2 \
@@ -199,16 +159,16 @@ antigravity-guard assume <task-id> vendor-api supports-v2 \
   --ttl-minutes 1440
 ```
 
-The newest value for a key is the current assumption. If that value expires, Antigravity reports it as expired instead of silently falling back to an older value.
+If the newest value expires, Antigravity reports it as expired instead of silently falling back to an older claim.
 
-### Preserve invariants across agent handoffs
+### Protected invariants
 
 ```bash
 antigravity-guard invariant <task-id> "Public API remains backward-compatible"
 antigravity-guard invariant <task-id> "Never modify production credentials"
 ```
 
-### Declare the expected blast radius
+### Change policy and local Git audit
 
 ```bash
 antigravity-guard policy <task-id> \
@@ -217,51 +177,112 @@ antigravity-guard policy <task-id> \
   --protect "config/prod/**" \
   --max-files 8 \
   --max-lines 300
-```
 
-### Audit the real local Git diff
-
-```bash
 antigravity-guard audit <task-id>
 antigravity-guard audit <task-id> --base origin/main --json
 ```
 
-The audit includes tracked and untracked local changes, ignores `.antigravity/` state, and fails non-zero when it finds protected-path edits, files outside the allowed patterns, file/line budget overruns, or an expired latest assumption.
+The audit includes tracked and untracked local changes, ignores `.antigravity/` state, and fails non-zero on protected-path edits, out-of-scope files, budget overruns, or expired latest assumptions.
 
-This catches a class of failure that unit tests do not: the code may work, but the agent changed far more than the task authorized or relied on an external fact that is no longer fresh.
+See [`docs/GUARD.md`](docs/GUARD.md).
 
-Generate a compact guard context for a Builder or Reviewer:
+## Release proof: challenge apparently-green work
 
-```bash
-antigravity-guard packet <task-id>
-```
+Version 0.6 adds `antigravity-proof`, an evidence layer for review and release decisions.
 
-See [`docs/GUARD.md`](docs/GUARD.md) for the audit model and limitations.
-
-### Inspect state
+### Build one proof artifact
 
 ```bash
-antigravity status
+antigravity-proof bundle <task-id>
+
+antigravity-proof bundle <task-id> \
+  --json-out .antigravity/proofs/release.json \
+  --markdown-out .antigravity/proofs/release.md
 ```
 
-Status combines readiness, review count, and verification summaries, for example:
+The proof snapshots:
+
+- objective and acceptance criteria;
+- dependency readiness;
+- settled decisions and active approval receipts;
+- lease state/history;
+- active/expired assumptions and invariants;
+- latest verification result for each named check;
+- evidence age and stale-evidence signals;
+- current blast-radius audit;
+- reality-check blockers/evidence debt;
+- Git HEAD, coordination fingerprint, and a deterministic proof digest.
+
+A non-ready proof exits non-zero. The artifact still explains exactly why it is not ready.
+
+### Counterfactual reviewer
+
+```bash
+antigravity-proof counterfactual <task-id>
+antigravity-proof counterfactual <task-id> --output counterfactual-review.md
+```
+
+This prompt deliberately assumes the current green checks are truthful, then asks a reviewer to find ways the release could **still** fail: false-green tests, missing negative cases, wrong assumptions, security boundaries, rollback/migration risk, scope drift, and stale coordination.
+
+Instead of another confidence summary, it requires **falsifiable hypotheses** and the cheapest test that could disprove each one.
+
+### Redacted reproduction recipe
+
+```bash
+antigravity-proof repro <task-id>
+antigravity-proof repro <task-id> --json --output repro.json
+```
+
+The recipe carries changed paths, non-secret assumption names/sources, invariants, acceptance criteria, Git HEAD, and recorded verification command names. It omits assumption values and redacts common credential/token patterns and secret-bearing assignments.
+
+See [`docs/RELEASE_PROOF.md`](docs/RELEASE_PROOF.md).
+
+## A practical end-to-end flow
 
 ```text
-planned    <task-id>  Build adapter  blocked=<dependency-id> reviews=1 checks=2/3 failed=1
+GitHub issue / human request
+          ↓
+Antigravity task + dependencies
+          ↓
+Decisions + exact approval receipts
+          ↓
+Task lease
+          ↓
+Assumptions + invariants + change budget
+          ↓
+Builder / Codex prompt
+          ↓
+Recorded verification + independent review
+          ↓
+Reality check + blast-radius audit
+          ↓
+Release proof
+          ↓
+Counterfactual review
+          ↓
+Human/release system decides whether to ship
 ```
 
 ## Repository structure
 
 ```text
-src/antigravity/          Core CLI + optional integration/coordination/guard modules
-AGENTS.example.md         Agent governance template
-docs/WORKFLOW.md          Workflow and handoff protocol
-docs/GITHUB.md            Opt-in GitHub integration boundary
-docs/COORDINATION.md      Decisions, approvals, leases, fingerprints, reality checks
-docs/GUARD.md             Assumption freshness, invariants, and blast-radius audits
-templates/TASK.md         Human-readable task template
-examples/                 Example task briefs
-tests/                    Unit tests
+src/antigravity/
+  cli.py                 Core local task workflow
+  github_adapter.py      Opt-in gh-backed GitHub bridge
+  coordination.py        Decisions, approvals, leases, freshness, reality checks
+  guard.py               Assumption TTLs, invariants, Git blast-radius audits
+  proof.py               Release proofs, counterfactual prompts, repro recipes
+
+docs/
+  WORKFLOW.md
+  GITHUB.md
+  COORDINATION.md
+  GUARD.md
+  RELEASE_PROOF.md
+AGENTS.example.md
+templates/
+examples/
+tests/
 ```
 
 ## Design goals
@@ -269,16 +290,17 @@ tests/                    Unit tests
 - no service or database required;
 - plain files that work with Git;
 - low ceremony and low token overhead;
-- human-readable state;
+- human-readable state plus machine-readable evidence;
 - compatible with existing project instructions;
 - safe defaults without turning every action into an approval checkpoint;
 - network integrations remain explicit and optional;
-- coordination state should survive chat/session boundaries;
-- scope and evidence drift should be visible before review or release.
+- coordination state survives chat/session boundaries;
+- stale evidence, stale facts, and scope creep become visible before release;
+- reviewers can challenge green evidence rather than simply trusting it.
 
 ## Non-goals
 
-Antigravity is not an autonomous deployment platform, secret manager, operating-system permission system, or replacement for CI/CD. Approval receipts, leases, protected paths, and change budgets are governance records and audit signals, not security boundaries.
+Antigravity is not a secret manager, operating-system permission system, autonomous deployment platform, or replacement for CI/CD. Approval receipts, leases, protected paths, proof bundles, and change budgets are governance/evidence mechanisms, not security boundaries or correctness guarantees.
 
 ## Contributing
 
@@ -286,7 +308,7 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Changelog
 
-See [`CHANGELOG.md`](CHANGELOG.md) for notable project changes.
+See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
