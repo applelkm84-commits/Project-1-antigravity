@@ -14,6 +14,21 @@ Useful reports include the affected version, reproduction conditions, impact, an
 
 Antigravity is designed to remain local and file-based. The core CLI should not require network access, collect telemetry, execute generated shell commands, or read credentials. Changes that alter these properties require explicit documentation and review.
 
+## Coordination receipts are not authorization
+
+`antigravity-coord` stores decisions, approval receipts, and task leases as coordination metadata. These records help agents avoid repeated confirmation and accidental concurrent work, but they are **not** an operating-system, provider, or organizational permission system.
+
+In particular:
+
+- an approval receipt authorizes only its exact recorded scope;
+- a receipt does not bypass a provider's own confirmation or safety requirements;
+- an expired or revoked approval is not active;
+- a task lease does not lock files or grant write permission;
+- a context fingerprint detects task-state drift but does not prove code integrity;
+- a `reality` report summarizes recorded evidence and cannot verify work that was never actually performed.
+
+High-impact or externally visible actions still require whatever authorization the surrounding environment requires.
+
 ## Optional GitHub adapter
 
 `antigravity-github` is an opt-in integration boundary. It delegates GitHub authentication and network access to an existing `gh` CLI installation instead of reading tokens or credential files itself.
