@@ -72,9 +72,17 @@ def init_repo(root: Path) -> None:
     print(f"Initialized Antigravity in {root}")
 
 
-def render_task(title: str, task_id: str, constraints: list[str], acceptance: list[str]) -> str:
+def render_task(
+    title: str,
+    task_id: str,
+    constraints: list[str],
+    acceptance: list[str],
+    dependencies: list[str] | None = None,
+) -> str:
     constraints_text = "\n".join(f"- {item}" for item in constraints) or "- None recorded"
     acceptance_text = "\n".join(f"- [ ] {item}" for item in acceptance) or "- [ ] Define and verify acceptance criteria"
+    dependencies = dependencies or []
+    dependencies_text = "\n".join(f"- `{item}`" for item in dependencies) or "- None"
     return f"""# {title}
 
 **Task ID:** `{task_id}`  
@@ -89,6 +97,9 @@ def render_task(title: str, task_id: str, constraints: list[str], acceptance: li
 
 ## Acceptance criteria
 {acceptance_text}
+
+## Dependencies
+{dependencies_text}
 
 ## Plan
 1. Orchestrator confirms scope and material unknowns.
@@ -123,16 +134,23 @@ def find_task(state: dict, task_id: str) -> dict:
     raise SystemExit(f"Unknown task id: {task_id}")
 
 
-def create_task(root: Path, title: str, constraints: list[str], acceptance: list[str]) -> Path:
+def create_task(
+    root: Path,
+    title: str,
+    constraints: list[str],
+    acceptance: list[str],
+    dependencies: list[str] | None = None,
+) -> Path:
     if not state_path(root).exists():
         init_repo(root)
+    dependencies = dependencies or []
     state = load_state(root)
     created = datetime.now(timezone.utc)
     stamp = created.strftime("%Y%m%d-%H%M%S")
     task_id = f"{stamp}-{slugify(title)}"
     relative = Path(STATE_DIR) / TASK_DIR / f"{task_id}.md"
     path = root / relative
-    path.write_text(render_task(title, task_id, constraints, acceptance), encoding="utf-8")
+    path.write_text(render_task(title, task_id, constraints, acceptance, dependencies), encoding="utf-8")
     state.setdefault("tasks", []).append(
         {
             "id": task_id,
@@ -142,6 +160,7 @@ def create_task(root: Path, title: str, constraints: list[str], acceptance: list
             "created_at": created.replace(microsecond=0).isoformat(),
             "reviews": [],
             "verifications": [],
+            "depends_on": dependencies,
         }
     )
     save_state(root, state)
@@ -215,6 +234,48 @@ def record_verification(
     print(f"Recorded {result} verification for {task_id}: {check}")
 
 
+def dependency_cycle_ids(tasks: list[dict]) -> set[str]:
+    task_by_id = {task.get("id"): task for task in tasks if task.get("id")}
+    state: dict[str, int] = {}
+    stack: list[str] = []
+    cycles: set[str] = set()
+
+    def visit(task_id: str) -> None:
+        state[task_id] = 1
+        stack.append(task_id)
+        for dependency in task_by_id[task_id].get("depends_on", []):
+            if dependency not in task_by_id:
+                continue
+            dependency_state = state.get(dependency, 0)
+            if dependency_state == 0:
+                visit(dependency)
+            elif dependency_state == 1:
+                index = stack.index(dependency)
+                cycles.update(stack[index:])
+        stack.pop()
+        state[task_id] = 2
+
+    for task_id in task_by_id:
+        if state.get(task_id, 0) == 0:
+            visit(task_id)
+    return cycles
+
+
+def readiness_label(task: dict, task_by_id: dict[str, dict], cycle_ids: set[str]) -> str | None:
+    if task.get("status") == "complete":
+        return None
+    task_id = task.get("id")
+    if task_id in cycle_ids:
+        return "blocked=cycle"
+    for dependency in task.get("depends_on", []):
+        dependency_task = task_by_id.get(dependency)
+        if dependency_task is None:
+            return f"blocked=missing:{dependency}"
+        if dependency_task.get("status") != "complete":
+            return f"blocked={dependency}"
+    return "ready"
+
+
 def complete_task(root: Path, task_id: str, note: str | None) -> None:
     state = load_state(root)
     task = find_task(state, task_id)
@@ -237,12 +298,17 @@ def show_status(root: Path) -> None:
     if not tasks:
         print("No tasks recorded.")
         return
+    task_by_id = {task.get("id"): task for task in tasks if task.get("id")}
+    cycle_ids = dependency_cycle_ids(tasks)
     for task in tasks:
         reviews = len(task.get("reviews", []))
         verifications = task.get("verifications", [])
         passed = sum(1 for item in verifications if item.get("result") == "passed")
         failed = sum(1 for item in verifications if item.get("result") == "failed")
         parts: list[str] = []
+        readiness = readiness_label(task, task_by_id, cycle_ids)
+        if readiness:
+            parts.append(readiness)
         if reviews:
             parts.append(f"reviews={reviews}")
         if verifications:
@@ -264,6 +330,7 @@ def parser() -> argparse.ArgumentParser:
     task.add_argument("title")
     task.add_argument("--constraint", action="append", default=[], help="Constraint; repeatable")
     task.add_argument("--accept", action="append", default=[], help="Acceptance criterion; repeatable")
+    task.add_argument("--depends-on", action="append", default=[], help="Prerequisite task ID; repeatable")
 
     review = sub.add_parser("review", help="Record a structured review finding")
     review.add_argument("task_id")
@@ -291,7 +358,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "init":
         init_repo(root)
     elif args.command == "task":
-        create_task(root, args.title, args.constraint, args.accept)
+        create_task(root, args.title, args.constraint, args.accept, args.depends_on)
     elif args.command == "review":
         record_review(root, args.task_id, args.severity, args.finding, args.path_ref)
     elif args.command == "verify":
