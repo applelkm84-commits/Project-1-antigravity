@@ -2,6 +2,25 @@
 
 All notable changes to Antigravity are documented here.
 
+## 0.6.0 — 2026-09-17
+
+### Added
+- `antigravity-proof bundle` release-evidence snapshots in Markdown and JSON;
+- proof snapshots covering objective, dependency readiness, decisions, approvals, lease history, assumptions, invariants, latest verification evidence, blast-radius audit, reality check, Git HEAD, and coordination fingerprint;
+- deterministic SHA-256 proof digests over the evidence snapshot;
+- verification evidence ages and conservative stale-evidence detection after relevant task/context changes or later local file modification;
+- non-ready proof exit status when blockers, evidence debt, stale checks, non-passing latest checks, or guard violations exist;
+- `antigravity-proof counterfactual` prompts that search for falsifiable failure modes even when recorded checks are green;
+- `antigravity-proof repro` minimal reproduction recipes in Markdown/JSON;
+- secret-aware recipe redaction for common token/credential formats and secret-bearing assignments;
+- dedicated release-proof documentation and regression tests.
+
+### Design guarantees
+- a release proof is an evidence artifact, not an authorization or correctness certificate;
+- counterfactual review does not invent test results and explicitly attacks false-green, negative-case, assumption, security, rollback, scope, and stale-coordination blind spots;
+- reproduction recipes omit assumption values and redact known secret-like material rather than copying task state wholesale;
+- proof generation remains local-first and adds no network/runtime dependency.
+
 ## 0.5.0 — 2026-09-17
 
 ### Added
