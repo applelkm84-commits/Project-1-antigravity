@@ -2,6 +2,26 @@
 
 All notable changes to Antigravity are documented here.
 
+## 0.4.0 — 2026-09-17
+
+### Added
+- local `antigravity-coord` companion command for multi-agent coordination state;
+- durable keyed decisions where the latest value for a key is active while prior choices remain in history;
+- scoped approval receipts with approver, optional expiry, note, and explicit revocation;
+- expiring task leases with collision refusal, refresh/reclaim behavior, release, and lease history;
+- deterministic SHA-256 context fingerprints for stale-prompt detection;
+- `check-context` non-zero stale detection before externally visible or irreversible work;
+- `reality` reports that separate dependency/review/check blockers from missing verification evidence;
+- latest-result semantics for repeated verification checks while preserving historical records;
+- coordination-aware role prompts containing decisions, approvals, lease ownership, reality status, and the context fingerprint.
+
+### Design guarantees
+- decisions and approval receipts are coordination records, not operating-system authorization;
+- exact approval scopes do not silently authorize broader actions;
+- leases are expiring coordination signals rather than filesystem locks;
+- coordination features remain local/file-based and add no network or runtime dependency;
+- stale-context checks detect task-state drift instead of relying on an agent's confidence or chat history.
+
 ## 0.3.0 — 2026-09-17
 
 ### Added
