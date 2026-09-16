@@ -2,7 +2,7 @@
 
 All notable changes to Antigravity are documented here.
 
-## Unreleased
+## 0.3.0 — 2026-09-17
 
 ### Added
 - portable JSON task bundles with `antigravity export-task` and `antigravity import-task`;
@@ -11,7 +11,15 @@ All notable changes to Antigravity are documented here.
 - safe import path rewriting under `.antigravity/tasks/` instead of trusting paths from imported bundles;
 - compact role-specific Codex-ready prompts with `antigravity codex-prompt`;
 - prompt roles for orchestrator, researcher, builder, reviewer, and finisher;
-- optional prompt file output without invoking Codex, requiring credentials, or adding network dependencies.
+- optional prompt file output without invoking Codex, requiring credentials, or adding network dependencies;
+- opt-in `antigravity-github` integration backed by an existing authenticated `gh` CLI;
+- GitHub issue import with source URL, number, labels, and original issue body;
+- local PR handoff generation from Antigravity task state without auto-pushing or auto-merging.
+
+### Security
+- GitHub integration uses argument-list subprocess execution with `shell=False`;
+- Antigravity does not read GitHub tokens or credential files;
+- imported remote issue content is treated as untrusted text and does not override repository policy.
 
 ## 0.2.0 — 2026-09-17
 
