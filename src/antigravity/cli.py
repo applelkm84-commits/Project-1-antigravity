@@ -9,6 +9,8 @@ from pathlib import Path
 STATE_DIR = ".antigravity"
 STATE_FILE = "state.json"
 TASK_DIR = "tasks"
+BUNDLE_SCHEMA_VERSION = 1
+SAFE_TASK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 AGENT_POLICY = """# AGENTS.md
 
@@ -171,16 +173,11 @@ def create_task(
 def record_review(root: Path, task_id: str, severity: str, finding: str, path_ref: str | None) -> None:
     state = load_state(root)
     task = find_task(state, task_id)
-    review = {
-        "severity": severity,
-        "finding": finding,
-        "created_at": utc_now(),
-    }
+    review = {"severity": severity, "finding": finding, "created_at": utc_now()}
     if path_ref:
         review["path"] = path_ref
     task.setdefault("reviews", []).append(review)
     save_state(root, state)
-
     task_path = root / task["path"]
     if task_path.exists():
         text = task_path.read_text(encoding="utf-8")
@@ -199,25 +196,14 @@ def record_review(root: Path, task_id: str, severity: str, finding: str, path_re
     print(f"Recorded {severity} finding for {task_id}")
 
 
-def record_verification(
-    root: Path,
-    task_id: str,
-    check: str,
-    result: str,
-    note: str | None,
-) -> None:
+def record_verification(root: Path, task_id: str, check: str, result: str, note: str | None) -> None:
     state = load_state(root)
     task = find_task(state, task_id)
-    verification = {
-        "check": check,
-        "result": result,
-        "created_at": utc_now(),
-    }
+    verification = {"check": check, "result": result, "created_at": utc_now()}
     if note:
         verification["note"] = note
     task.setdefault("verifications", []).append(verification)
     save_state(root, state)
-
     task_path = root / task["path"]
     if task_path.exists():
         text = task_path.read_text(encoding="utf-8")
@@ -250,8 +236,7 @@ def dependency_cycle_ids(tasks: list[dict]) -> set[str]:
             if dependency_state == 0:
                 visit(dependency)
             elif dependency_state == 1:
-                index = stack.index(dependency)
-                cycles.update(stack[index:])
+                cycles.update(stack[stack.index(dependency) :])
         stack.pop()
         state[task_id] = 2
 
@@ -274,6 +259,67 @@ def readiness_label(task: dict, task_by_id: dict[str, dict], cycle_ids: set[str]
         if dependency_task.get("status") != "complete":
             return f"blocked={dependency}"
     return "ready"
+
+
+def export_task(root: Path, task_id: str, output: Path | None) -> str:
+    state = load_state(root)
+    task = find_task(state, task_id)
+    task_path = root / task["path"]
+    if not task_path.exists():
+        raise SystemExit(f"Task Markdown is missing: {task['path']}")
+    payload = {
+        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "task": task,
+        "markdown": task_path.read_text(encoding="utf-8"),
+    }
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(serialized, encoding="utf-8")
+        print(output)
+    else:
+        print(serialized, end="")
+    return serialized
+
+
+def import_task(root: Path, source: Path) -> Path:
+    if not state_path(root).exists():
+        init_repo(root)
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"Unable to read task bundle: {exc}") from exc
+    if payload.get("schema_version") != BUNDLE_SCHEMA_VERSION:
+        raise SystemExit(f"Unsupported task bundle schema: {payload.get('schema_version')}")
+    task = payload.get("task")
+    markdown = payload.get("markdown")
+    if not isinstance(task, dict) or not isinstance(markdown, str):
+        raise SystemExit("Invalid task bundle: expected task object and markdown text")
+    task_id = task.get("id")
+    title = task.get("title")
+    status = task.get("status", "planned")
+    if not isinstance(task_id, str) or not SAFE_TASK_ID.fullmatch(task_id):
+        raise SystemExit("Invalid task bundle: unsafe task id")
+    if not isinstance(title, str) or not title.strip():
+        raise SystemExit("Invalid task bundle: missing task title")
+    if status not in {"planned", "complete"}:
+        raise SystemExit(f"Invalid task bundle: unsupported task status {status!r}")
+    state = load_state(root)
+    if any(existing.get("id") == task_id for existing in state.get("tasks", [])):
+        raise SystemExit(f"Task already exists: {task_id}")
+    relative = Path(STATE_DIR) / TASK_DIR / f"{task_id}.md"
+    imported = dict(task)
+    imported["path"] = relative.as_posix()
+    imported.setdefault("reviews", [])
+    imported.setdefault("verifications", [])
+    imported.setdefault("depends_on", [])
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(markdown, encoding="utf-8")
+    state.setdefault("tasks", []).append(imported)
+    save_state(root, state)
+    print(path)
+    return path
 
 
 def complete_task(root: Path, task_id: str, note: str | None) -> None:
@@ -344,6 +390,13 @@ def parser() -> argparse.ArgumentParser:
     verify.add_argument("--result", choices=["passed", "failed", "skipped"], required=True)
     verify.add_argument("--note", help="Optional verification note")
 
+    export_cmd = sub.add_parser("export-task", help="Export one task as a portable JSON bundle")
+    export_cmd.add_argument("task_id")
+    export_cmd.add_argument("--output", type=Path, help="Write bundle to this path instead of stdout")
+
+    import_cmd = sub.add_parser("import-task", help="Import a portable JSON task bundle")
+    import_cmd.add_argument("source", type=Path)
+
     sub.add_parser("status", help="Show recorded task state")
 
     complete = sub.add_parser("complete", help="Mark a task complete")
@@ -363,6 +416,10 @@ def main(argv: list[str] | None = None) -> None:
         record_review(root, args.task_id, args.severity, args.finding, args.path_ref)
     elif args.command == "verify":
         record_verification(root, args.task_id, args.check, args.result, args.note)
+    elif args.command == "export-task":
+        export_task(root, args.task_id, args.output)
+    elif args.command == "import-task":
+        import_task(root, args.source)
     elif args.command == "status":
         show_status(root)
     elif args.command == "complete":
