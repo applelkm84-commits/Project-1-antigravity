@@ -8,7 +8,10 @@ All notable changes to Antigravity are documented here.
 - portable JSON task bundles with `antigravity export-task` and `antigravity import-task`;
 - task bundle round-trip support for machine-readable task state and human-readable Markdown;
 - safety checks for duplicate task IDs, unsupported bundle schemas, and unsafe imported task IDs;
-- safe import path rewriting under `.antigravity/tasks/` instead of trusting paths from imported bundles.
+- safe import path rewriting under `.antigravity/tasks/` instead of trusting paths from imported bundles;
+- compact role-specific Codex-ready prompts with `antigravity codex-prompt`;
+- prompt roles for orchestrator, researcher, builder, reviewer, and finisher;
+- optional prompt file output without invoking Codex, requiring credentials, or adding network dependencies.
 
 ## 0.2.0 — 2026-09-17
 
