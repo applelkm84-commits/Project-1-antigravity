@@ -138,7 +138,9 @@ def run_git(root: Path, args: list[str]) -> str:
 
 
 def _visible_path(path: str) -> bool:
-    normalized = path.replace("\\", "/").lstrip("./")
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     return normalized != ".antigravity" and not normalized.startswith(".antigravity/")
 
 
