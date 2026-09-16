@@ -2,7 +2,7 @@
 
 A lightweight, file-based multi-agent workflow for Codex and other coding agents.
 
-Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, compact role-specific prompts, opt-in GitHub handoffs, and coordination receipts that preserve decisions, approvals, ownership, and context freshness across agents.
+Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, compact role-specific prompts, opt-in GitHub handoffs, coordination receipts, expiring assumptions, protected invariants, and local Git blast-radius audits.
 
 ## Why
 
@@ -14,7 +14,9 @@ Agent workflows often fail for predictable reasons:
 - two agents can unknowingly work the same task at once;
 - important decisions disappear between turns;
 - a prompt can remain syntactically valid after the underlying task state has changed;
-- there is no durable record of what is done, blocked, approved, or actually verified.
+- an external fact can quietly expire while the implementation still assumes it is current;
+- a small fix can silently grow into a broad refactor touching protected files;
+- there is no durable record of what is done, blocked, approved, assumed, in-scope, or actually verified.
 
 Antigravity uses repository files as the control plane so humans and agents can inspect the same source of truth.
 
@@ -94,8 +96,6 @@ antigravity review <task-id> "Add a regression check" \
   --path src/navigation.css
 ```
 
-Review findings are stored in both the task state and the human-readable task brief.
-
 ### Record a verification result
 
 Antigravity records evidence but does **not** execute the command for you:
@@ -107,29 +107,23 @@ antigravity verify <task-id> "pytest -q" \
   --note "12 tests passed"
 ```
 
-Supported results are `passed`, `failed`, and `skipped`. Each record stores the check name, result, timestamp, and optional note in `.antigravity/state.json`, while also appending a readable entry to the task brief.
-
 ### Export and import a task brief
-
-A task can be moved between repositories as a portable JSON bundle containing both machine-readable state and the human-readable Markdown brief:
 
 ```bash
 antigravity export-task <task-id> --output task.bundle.json
 antigravity --root ../another-repo import-task task.bundle.json
 ```
 
-Imports reject unsupported bundle schemas, duplicate task IDs, and unsafe IDs that could escape `.antigravity/tasks/`. Imported task paths are always rewritten inside the destination repository.
+Imports reject unsupported bundle schemas, duplicate task IDs, and unsafe IDs that could escape `.antigravity/tasks/`.
 
 ### Generate a Codex-ready prompt
-
-Generate a compact prompt from durable task state instead of replaying a chat transcript:
 
 ```bash
 antigravity codex-prompt <task-id> --role builder
 antigravity codex-prompt <task-id> --role reviewer --output reviewer-prompt.md
 ```
 
-Available roles are `orchestrator`, `researcher`, `builder`, `reviewer`, and `finisher`. The command does not invoke Codex, require credentials, or add a network dependency.
+The command does not invoke Codex, require credentials, or add a network dependency.
 
 ### Optional GitHub issue / PR handoffs
 
@@ -140,8 +134,6 @@ gh auth status
 antigravity-github import-issue owner/repo 42
 antigravity-github pr-handoff <task-id> --output pr-body.md
 ```
-
-`import-issue` turns an issue into a normal local task while preserving its source URL, number, labels, and original body. `pr-handoff` generates a reviewable PR description from local task state; it does **not** push, open, or merge a pull request.
 
 See [`docs/GITHUB.md`](docs/GITHUB.md) for the integration and security boundary.
 
@@ -155,8 +147,6 @@ The `antigravity-coord` companion command keeps coordination facts durable witho
 antigravity-coord decide <task-id> database sqlite \
   --reason "Single-user local state"
 ```
-
-Decisions are keyed. A newer value for the same key becomes active while history remains available, so later agents can consume the current decision instead of reopening it from scratch.
 
 ### Record exact approval scopes
 
@@ -175,16 +165,12 @@ antigravity-coord claim <task-id> --owner builder-a --ttl-minutes 30
 antigravity-coord release <task-id> --owner builder-a
 ```
 
-A different owner cannot claim the task while the lease is active. Expired leases can be reclaimed automatically, and lease history remains in task state.
-
 ### Detect stale agent context
 
 ```bash
 FINGERPRINT=$(antigravity-coord fingerprint <task-id>)
 antigravity-coord check-context <task-id> "$FINGERPRINT"
 ```
-
-The fingerprint covers the task state that matters to an agent: status, dependencies, reviews, verification evidence, source metadata, decisions, approvals, lease, and completion state. If any of it changes, `check-context` reports stale context and exits non-zero.
 
 ### Measure evidence debt before saying “done”
 
@@ -193,17 +179,64 @@ antigravity-coord reality <task-id>
 antigravity-coord reality <task-id> --json
 ```
 
-The reality report surfaces dependency blockers, error-severity review findings, the latest result for each verification check, missing verification evidence, current lease ownership, and the context fingerprint. A later passing result for the same check resolves an earlier failed result for finish-readiness while preserving the historical record.
-
 ### Generate a coordination-aware prompt
 
 ```bash
 antigravity-coord prompt <task-id> --role builder
 ```
 
-This packet adds settled decisions, active approval receipts, lease ownership, reality-check findings, and a context fingerprint to the normal role-specific task context. It explicitly tells agents not to re-ask for already-approved exact scopes, not to race another lease owner, and to refresh context before irreversible or externally visible actions when the fingerprint changed.
-
 See [`docs/COORDINATION.md`](docs/COORDINATION.md) for the full model and limitations.
+
+## Guard layer: stale assumptions and scope creep
+
+The `antigravity-guard` companion command makes two otherwise invisible risks explicit: **the facts behind a task may expire**, and **the actual diff may exceed the task's intended blast radius**.
+
+### Record an assumption with evidence and TTL
+
+```bash
+antigravity-guard assume <task-id> vendor-api supports-v2 \
+  --source "vendor docs checked 2026-09-17" \
+  --ttl-minutes 1440
+```
+
+The newest value for a key is the current assumption. If that value expires, Antigravity reports it as expired instead of silently falling back to an older value.
+
+### Preserve invariants across agent handoffs
+
+```bash
+antigravity-guard invariant <task-id> "Public API remains backward-compatible"
+antigravity-guard invariant <task-id> "Never modify production credentials"
+```
+
+### Declare the expected blast radius
+
+```bash
+antigravity-guard policy <task-id> \
+  --allow "src/**" \
+  --allow "tests/**" \
+  --protect "config/prod/**" \
+  --max-files 8 \
+  --max-lines 300
+```
+
+### Audit the real local Git diff
+
+```bash
+antigravity-guard audit <task-id>
+antigravity-guard audit <task-id> --base origin/main --json
+```
+
+The audit includes tracked and untracked local changes, ignores `.antigravity/` state, and fails non-zero when it finds protected-path edits, files outside the allowed patterns, file/line budget overruns, or an expired latest assumption.
+
+This catches a class of failure that unit tests do not: the code may work, but the agent changed far more than the task authorized or relied on an external fact that is no longer fresh.
+
+Generate a compact guard context for a Builder or Reviewer:
+
+```bash
+antigravity-guard packet <task-id>
+```
+
+See [`docs/GUARD.md`](docs/GUARD.md) for the audit model and limitations.
 
 ### Inspect state
 
@@ -220,11 +253,12 @@ planned    <task-id>  Build adapter  blocked=<dependency-id> reviews=1 checks=2/
 ## Repository structure
 
 ```text
-src/antigravity/          Core CLI + optional integration/coordination modules
+src/antigravity/          Core CLI + optional integration/coordination/guard modules
 AGENTS.example.md         Agent governance template
 docs/WORKFLOW.md          Workflow and handoff protocol
 docs/GITHUB.md            Opt-in GitHub integration boundary
 docs/COORDINATION.md      Decisions, approvals, leases, fingerprints, reality checks
+docs/GUARD.md             Assumption freshness, invariants, and blast-radius audits
 templates/TASK.md         Human-readable task template
 examples/                 Example task briefs
 tests/                    Unit tests
@@ -239,11 +273,12 @@ tests/                    Unit tests
 - compatible with existing project instructions;
 - safe defaults without turning every action into an approval checkpoint;
 - network integrations remain explicit and optional;
-- coordination state should survive chat/session boundaries.
+- coordination state should survive chat/session boundaries;
+- scope and evidence drift should be visible before review or release.
 
 ## Non-goals
 
-Antigravity is not an autonomous deployment platform, secret manager, operating-system permission system, or replacement for CI/CD. Approval receipts and leases are coordination records, not security boundaries.
+Antigravity is not an autonomous deployment platform, secret manager, operating-system permission system, or replacement for CI/CD. Approval receipts, leases, protected paths, and change budgets are governance records and audit signals, not security boundaries.
 
 ## Contributing
 
