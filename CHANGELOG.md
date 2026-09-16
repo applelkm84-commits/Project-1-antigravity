@@ -2,6 +2,14 @@
 
 All notable changes to Antigravity are documented here.
 
+## Unreleased
+
+### Added
+- portable JSON task bundles with `antigravity export-task` and `antigravity import-task`;
+- task bundle round-trip support for machine-readable task state and human-readable Markdown;
+- safety checks for duplicate task IDs, unsupported bundle schemas, and unsafe imported task IDs;
+- safe import path rewriting under `.antigravity/tasks/` instead of trusting paths from imported bundles.
+
 ## 0.2.0 — 2026-09-17
 
 ### Added
