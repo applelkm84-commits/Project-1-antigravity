@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "antigravity-agent-workflow"
-version = "0.3.0"
+version = "0.4.0"
 description = "A lightweight file-based multi-agent workflow for coding agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,7 @@ classifiers = [
 [project.scripts]
 antigravity = "antigravity.cli:main"
 antigravity-github = "antigravity.github_adapter:main"
+antigravity-coord = "antigravity.coordination:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

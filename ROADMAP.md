@@ -18,11 +18,18 @@
 - [x] Import/export for task briefs
 
 ## 0.4 — Coordination receipts
-- [ ] Durable decisions so agents do not reopen settled choices
-- [ ] Scoped approval receipts so already-approved actions are not repeatedly re-confirmed
-- [ ] Expiring task leases to reduce concurrent-agent collisions
-- [ ] Context fingerprints to detect stale prompts after task state changes
-- [ ] Reality check for evidence debt before finishing a task
+- [x] Durable keyed decisions so agents do not reopen settled choices
+- [x] Scoped approval receipts so already-approved actions are not repeatedly re-confirmed
+- [x] Expiring task leases to reduce concurrent-agent collisions
+- [x] Context fingerprints to detect stale prompts after task state changes
+- [x] Reality check for blockers and evidence debt before finishing a task
+- [x] Coordination-aware prompts that carry receipts and stale-context instructions
+
+## 0.5 — Scope and assumption defense
+- [ ] Expiring assumptions with evidence/source metadata so time-sensitive facts cannot silently become permanent truth
+- [ ] Protected invariants that survive handoffs (for example: public API compatibility or "never touch production config")
+- [ ] Local Git blast-radius audit that flags changed files outside the task's declared scope
+- [ ] Change-budget / scope-creep report before review and release handoff
 
 ## Principles
 Roadmap items must preserve Antigravity's local-first, low-dependency design. Networked integrations should remain optional and must never require users to expose private prompts, source code, or credentials to the core CLI.

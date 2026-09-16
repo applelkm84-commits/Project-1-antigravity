@@ -2,7 +2,7 @@
 
 A lightweight, file-based multi-agent workflow for Codex and other coding agents.
 
-Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, compact role-specific prompts, and opt-in GitHub issue/PR handoffs. It is designed for solo builders and small teams that want stronger agent autonomy without a heavy orchestration server.
+Antigravity gives a repository a small operating system for agentic work: clear roles, explicit handoffs, durable task state, dependency-aware readiness, verification evidence, portable task bundles, compact role-specific prompts, opt-in GitHub handoffs, and coordination receipts that preserve decisions, approvals, ownership, and context freshness across agents.
 
 ## Why
 
@@ -10,10 +10,11 @@ Agent workflows often fail for predictable reasons:
 
 - every task starts from zero context;
 - planning, implementation, review, and release get mixed together;
-- agents ask for unnecessary confirmations;
-- important constraints disappear between turns;
-- token usage grows because the same context is repeated;
-- there is no durable record of what is done, blocked, or actually verified.
+- agents ask for approvals that were already given in another conversation;
+- two agents can unknowingly work the same task at once;
+- important decisions disappear between turns;
+- a prompt can remain syntactically valid after the underlying task state has changed;
+- there is no durable record of what is done, blocked, approved, or actually verified.
 
 Antigravity uses repository files as the control plane so humans and agents can inspect the same source of truth.
 
@@ -121,16 +122,14 @@ Imports reject unsupported bundle schemas, duplicate task IDs, and unsafe IDs th
 
 ### Generate a Codex-ready prompt
 
-Generate a compact prompt from the durable task state instead of replaying a chat transcript:
+Generate a compact prompt from durable task state instead of replaying a chat transcript:
 
 ```bash
 antigravity codex-prompt <task-id> --role builder
 antigravity codex-prompt <task-id> --role reviewer --output reviewer-prompt.md
 ```
 
-Available roles are `orchestrator`, `researcher`, `builder`, `reviewer`, and `finisher`. The prompt includes only the task objective, constraints, acceptance criteria, dependency readiness, current review findings, verification evidence, role-specific instructions, and the required handoff format.
-
-The command **does not invoke Codex**, require credentials, or add a network dependency. It produces plain text that can be pasted or passed into the coding-agent workflow you already use.
+Available roles are `orchestrator`, `researcher`, `builder`, `reviewer`, and `finisher`. The command does not invoke Codex, require credentials, or add a network dependency.
 
 ### Optional GitHub issue / PR handoffs
 
@@ -145,6 +144,66 @@ antigravity-github pr-handoff <task-id> --output pr-body.md
 `import-issue` turns an issue into a normal local task while preserving its source URL, number, labels, and original body. `pr-handoff` generates a reviewable PR description from local task state; it does **not** push, open, or merge a pull request.
 
 See [`docs/GITHUB.md`](docs/GITHUB.md) for the integration and security boundary.
+
+## Coordination layer: receipts instead of repeated conversation
+
+The `antigravity-coord` companion command keeps coordination facts durable without turning Antigravity into a server or permissions system.
+
+### Record settled decisions
+
+```bash
+antigravity-coord decide <task-id> database sqlite \
+  --reason "Single-user local state"
+```
+
+Decisions are keyed. A newer value for the same key becomes active while history remains available, so later agents can consume the current decision instead of reopening it from scratch.
+
+### Record exact approval scopes
+
+```bash
+antigravity-coord approve <task-id> "edit source files" --by maintainer
+antigravity-coord approve <task-id> "publish release" \
+  --by maintainer --ttl-minutes 60
+```
+
+Approval receipts exist to prevent low-value re-confirmation. They authorize only the exact recorded scope and can expire or be revoked.
+
+### Prevent agent collisions with expiring leases
+
+```bash
+antigravity-coord claim <task-id> --owner builder-a --ttl-minutes 30
+antigravity-coord release <task-id> --owner builder-a
+```
+
+A different owner cannot claim the task while the lease is active. Expired leases can be reclaimed automatically, and lease history remains in task state.
+
+### Detect stale agent context
+
+```bash
+FINGERPRINT=$(antigravity-coord fingerprint <task-id>)
+antigravity-coord check-context <task-id> "$FINGERPRINT"
+```
+
+The fingerprint covers the task state that matters to an agent: status, dependencies, reviews, verification evidence, source metadata, decisions, approvals, lease, and completion state. If any of it changes, `check-context` reports stale context and exits non-zero.
+
+### Measure evidence debt before saying “done”
+
+```bash
+antigravity-coord reality <task-id>
+antigravity-coord reality <task-id> --json
+```
+
+The reality report surfaces dependency blockers, error-severity review findings, the latest result for each verification check, missing verification evidence, current lease ownership, and the context fingerprint. A later passing result for the same check resolves an earlier failed result for finish-readiness while preserving the historical record.
+
+### Generate a coordination-aware prompt
+
+```bash
+antigravity-coord prompt <task-id> --role builder
+```
+
+This packet adds settled decisions, active approval receipts, lease ownership, reality-check findings, and a context fingerprint to the normal role-specific task context. It explicitly tells agents not to re-ask for already-approved exact scopes, not to race another lease owner, and to refresh context before irreversible or externally visible actions when the fingerprint changed.
+
+See [`docs/COORDINATION.md`](docs/COORDINATION.md) for the full model and limitations.
 
 ### Inspect state
 
@@ -161,13 +220,14 @@ planned    <task-id>  Build adapter  blocked=<dependency-id> reviews=1 checks=2/
 ## Repository structure
 
 ```text
-src/antigravity/        Core CLI + optional integration modules
-AGENTS.example.md       Agent governance template
-docs/WORKFLOW.md        Workflow and handoff protocol
-docs/GITHUB.md          Opt-in GitHub integration boundary
-templates/TASK.md       Human-readable task template
-examples/               Example task briefs
-tests/                  Unit tests
+src/antigravity/          Core CLI + optional integration/coordination modules
+AGENTS.example.md         Agent governance template
+docs/WORKFLOW.md          Workflow and handoff protocol
+docs/GITHUB.md            Opt-in GitHub integration boundary
+docs/COORDINATION.md      Decisions, approvals, leases, fingerprints, reality checks
+templates/TASK.md         Human-readable task template
+examples/                 Example task briefs
+tests/                    Unit tests
 ```
 
 ## Design goals
@@ -178,11 +238,12 @@ tests/                  Unit tests
 - human-readable state;
 - compatible with existing project instructions;
 - safe defaults without turning every action into an approval checkpoint;
-- network integrations remain explicit and optional.
+- network integrations remain explicit and optional;
+- coordination state should survive chat/session boundaries.
 
 ## Non-goals
 
-Antigravity is not an autonomous deployment platform, secret manager, permission system, or replacement for CI/CD. It is a governance and coordination layer for coding-agent work.
+Antigravity is not an autonomous deployment platform, secret manager, operating-system permission system, or replacement for CI/CD. Approval receipts and leases are coordination records, not security boundaries.
 
 ## Contributing
 
