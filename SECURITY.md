@@ -14,6 +14,19 @@ Useful reports include the affected version, reproduction conditions, impact, an
 
 Antigravity is designed to remain local and file-based. The core CLI should not require network access, collect telemetry, execute generated shell commands, or read credentials. Changes that alter these properties require explicit documentation and review.
 
+## Guard policies are audit signals, not file permissions
+
+`antigravity-guard` records assumption freshness, invariants, and expected change scope, then compares those records with the local Git working tree.
+
+- protected path patterns do not prevent a process from editing a file;
+- file/line budgets report scope expansion but do not enforce operating-system limits;
+- a clean audit says the observed diff fits the declared policy, not that the code is correct or secure;
+- an expired assumption is treated as a failed guard because the implementation premise is stale, even if the diff itself is in scope;
+- `.antigravity/` state is excluded from blast-radius counts so recording audit evidence does not create self-generated policy violations;
+- Git commands use argument lists with `shell=False` and do not interpolate refs or paths into shell strings.
+
+Use repository permissions, branch protection, CI, code review, and operating-system controls for actual access enforcement.
+
 ## Coordination receipts are not authorization
 
 `antigravity-coord` stores decisions, approval receipts, and task leases as coordination metadata. These records help agents avoid repeated confirmation and accidental concurrent work, but they are **not** an operating-system, provider, or organizational permission system.
