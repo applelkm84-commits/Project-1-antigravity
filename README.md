@@ -42,7 +42,7 @@ AGENTS.md
   tasks/
 ```
 
-A task command creates a durable task brief containing objective, constraints, acceptance criteria, plan, handoffs, and completion state.
+A task command creates a durable task brief containing objective, constraints, acceptance criteria, plan, handoffs, review findings, verification records, and completion state.
 
 ## Operating model
 
@@ -83,11 +83,26 @@ antigravity review <task-id> "Add a regression check" \
 
 Review findings are stored in both the task state and the human-readable task brief.
 
+### Record a verification result
+
+Antigravity records evidence but does **not** execute the command for you:
+
+```bash
+pytest -q
+antigravity verify <task-id> "pytest -q" \
+  --result passed \
+  --note "12 tests passed"
+```
+
+Supported results are `passed`, `failed`, and `skipped`. Each record stores the check name, result, timestamp, and optional note in `.antigravity/state.json`, while also appending a readable entry to the task brief.
+
 ### Inspect state
 
 ```bash
 antigravity status
 ```
+
+When verification records exist, status includes a compact summary such as `checks=2/3 failed=1`.
 
 ## Repository structure
 
