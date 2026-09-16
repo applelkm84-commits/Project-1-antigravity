@@ -103,6 +103,9 @@ Record only decisions, evidence, changed files, risks, and the next action.
 ## Review findings
 None recorded.
 
+## Verification records
+None recorded.
+
 ## Verification
 - [ ] Relevant tests/checks executed
 - [ ] Acceptance criteria reviewed
@@ -138,6 +141,7 @@ def create_task(root: Path, title: str, constraints: list[str], acceptance: list
             "path": relative.as_posix(),
             "created_at": created.replace(microsecond=0).isoformat(),
             "reviews": [],
+            "verifications": [],
         }
     )
     save_state(root, state)
@@ -166,12 +170,49 @@ def record_review(root: Path, task_id: str, severity: str, finding: str, path_re
         empty_marker = "## Review findings\nNone recorded."
         if empty_marker in text:
             text = text.replace(empty_marker, f"## Review findings\n{line}", 1)
+        elif "## Review findings\n" in text and "\n\n## Verification records" in text:
+            text = text.replace("\n\n## Verification records", f"\n{line}\n\n## Verification records", 1)
         elif "## Review findings\n" in text and "\n\n## Verification" in text:
             text = text.replace("\n\n## Verification", f"\n{line}\n\n## Verification", 1)
         else:
             text = text.replace("## Verification", f"## Review findings\n{line}\n\n## Verification", 1)
         task_path.write_text(text, encoding="utf-8")
     print(f"Recorded {severity} finding for {task_id}")
+
+
+def record_verification(
+    root: Path,
+    task_id: str,
+    check: str,
+    result: str,
+    note: str | None,
+) -> None:
+    state = load_state(root)
+    task = find_task(state, task_id)
+    verification = {
+        "check": check,
+        "result": result,
+        "created_at": utc_now(),
+    }
+    if note:
+        verification["note"] = note
+    task.setdefault("verifications", []).append(verification)
+    save_state(root, state)
+
+    task_path = root / task["path"]
+    if task_path.exists():
+        text = task_path.read_text(encoding="utf-8")
+        note_text = f" — {note}" if note else ""
+        line = f"- **{result.upper()}** `{check}`{note_text}"
+        empty_marker = "## Verification records\nNone recorded."
+        if empty_marker in text:
+            text = text.replace(empty_marker, f"## Verification records\n{line}", 1)
+        elif "## Verification records\n" in text and "\n\n## Verification" in text:
+            text = text.replace("\n\n## Verification", f"\n{line}\n\n## Verification", 1)
+        else:
+            text = text.replace("## Verification", f"## Verification records\n{line}\n\n## Verification", 1)
+        task_path.write_text(text, encoding="utf-8")
+    print(f"Recorded {result} verification for {task_id}: {check}")
 
 
 def complete_task(root: Path, task_id: str, note: str | None) -> None:
@@ -198,7 +239,17 @@ def show_status(root: Path) -> None:
         return
     for task in tasks:
         reviews = len(task.get("reviews", []))
-        suffix = f"  reviews={reviews}" if reviews else ""
+        verifications = task.get("verifications", [])
+        passed = sum(1 for item in verifications if item.get("result") == "passed")
+        failed = sum(1 for item in verifications if item.get("result") == "failed")
+        parts: list[str] = []
+        if reviews:
+            parts.append(f"reviews={reviews}")
+        if verifications:
+            parts.append(f"checks={passed}/{len(verifications)}")
+        if failed:
+            parts.append(f"failed={failed}")
+        suffix = f"  {' '.join(parts)}" if parts else ""
         print(f"{task['status']:<10} {task['id']}  {task['title']}{suffix}")
 
 
@@ -220,6 +271,12 @@ def parser() -> argparse.ArgumentParser:
     review.add_argument("--severity", choices=["info", "warning", "error"], default="warning")
     review.add_argument("--path", dest="path_ref", help="Optional file/path reference")
 
+    verify = sub.add_parser("verify", help="Record the result of a check without executing it")
+    verify.add_argument("task_id")
+    verify.add_argument("check", help="Check or command name, e.g. 'pytest -q'")
+    verify.add_argument("--result", choices=["passed", "failed", "skipped"], required=True)
+    verify.add_argument("--note", help="Optional verification note")
+
     sub.add_parser("status", help="Show recorded task state")
 
     complete = sub.add_parser("complete", help="Mark a task complete")
@@ -237,6 +294,8 @@ def main(argv: list[str] | None = None) -> None:
         create_task(root, args.title, args.constraint, args.accept)
     elif args.command == "review":
         record_review(root, args.task_id, args.severity, args.finding, args.path_ref)
+    elif args.command == "verify":
+        record_verification(root, args.task_id, args.check, args.result, args.note)
     elif args.command == "status":
         show_status(root)
     elif args.command == "complete":
