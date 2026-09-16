@@ -26,10 +26,17 @@
 - [x] Coordination-aware prompts that carry receipts and stale-context instructions
 
 ## 0.5 — Scope and assumption defense
-- [ ] Expiring assumptions with evidence/source metadata so time-sensitive facts cannot silently become permanent truth
-- [ ] Protected invariants that survive handoffs (for example: public API compatibility or "never touch production config")
-- [ ] Local Git blast-radius audit that flags changed files outside the task's declared scope
-- [ ] Change-budget / scope-creep report before review and release handoff
+- [x] Expiring assumptions with evidence/source metadata so time-sensitive facts cannot silently become permanent truth
+- [x] Protected invariants that survive handoffs
+- [x] Local Git blast-radius audit that flags changed files outside the task's declared scope
+- [x] File/line change budgets and scope-creep reporting before review/release handoff
+- [x] Machine-readable guard reports with non-zero policy-violation exit status
+
+## 0.6 — Release proof and counterfactual review
+- [ ] Release proof bundle that snapshots decisions, approvals, checks, scope audit, assumptions, and context fingerprints into one review artifact
+- [ ] Counterfactual reviewer prompt: "what could still be wrong even if every recorded check is green?"
+- [ ] Evidence freshness ages so old successful checks are visibly stale after relevant task changes
+- [ ] Minimal reproducibility recipe generated from task state without leaking secrets
 
 ## Principles
 Roadmap items must preserve Antigravity's local-first, low-dependency design. Networked integrations should remain optional and must never require users to expose private prompts, source code, or credentials to the core CLI.
