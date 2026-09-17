@@ -2,6 +2,26 @@
 
 All notable changes to Antigravity are documented here.
 
+## 0.7.0 — 2026-09-17
+
+### Added
+- local `antigravity-memory` companion command;
+- project-level `.antigravity/memory.json` near-miss ledger with paths, components, risk tags, evidence, and mitigation;
+- deterministic prior-near-miss recall using path, component, and risk overlap without embeddings or model/API calls;
+- acceptance-criterion evidence lineage linking requirements to checks, decisions, assumptions, invariants, or observations;
+- explicit unsupported-criterion and orphaned-lineage reporting when evidence is absent, invalid, expired, failed, or attached to changed criterion text;
+- deterministic component/path risk memory combining prior near-misses, failed latest checks, and related guard violations;
+- rollback rehearsal records and packets covering state restoration, irreversible side effects, migration/downgrade concerns, post-rollback verification, and containment;
+- promotion of counterfactual findings into durable invariants, expiring assumptions, verification templates, or near-miss records;
+- dedicated memory/rollback documentation and regression tests.
+
+### Design guarantees
+- failure-memory matching is deterministic and local; risk scores prioritize review attention and are not statistical failure probabilities;
+- criterion evidence resolves against current recorded state, so failed checks and expired assumptions do not silently support requirements;
+- changed acceptance-criterion wording does not inherit old evidence automatically;
+- rollback rehearsal is planning only and never executes rollback commands;
+- the memory layer adds no network/runtime dependency.
+
 ## 0.6.0 — 2026-09-17
 
 ### Added
