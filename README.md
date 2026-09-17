@@ -2,7 +2,7 @@
 
 A lightweight, Git-native operating layer for Codex and other coding agents.
 
-Antigravity keeps the parts of agentic work that usually disappear between chats in durable repository files: task state, decisions, approvals, leases, dependencies, verification evidence, assumptions, protected invariants, scope budgets, release proof, and compact handoffs.
+Antigravity keeps the parts of agentic work that usually disappear between chats in durable repository files: task state, decisions, approvals, leases, dependencies, verification evidence, assumptions, protected invariants, scope budgets, release proof, failure memory, evidence lineage, and compact handoffs.
 
 It is designed for solo builders and small teams that want stronger agent autonomy **without** a hosted orchestration server.
 
@@ -18,6 +18,9 @@ Coding agents often fail in ways that ordinary task lists and CI do not capture:
 - external facts quietly expire;
 - a small fix grows into a broad refactor while tests still pass;
 - reviewers see a confident summary but cannot reconstruct the evidence behind it;
+- a near-miss disappears after the pull request closes and the next agent repeats it;
+- an acceptance criterion exists without any explicit evidence proving it;
+- rollback planning starts only after the release fails;
 - reproduction notes accidentally carry secrets or credentials.
 
 Antigravity treats the repository as the coordination and evidence layer so humans and agents can inspect the same source of truth.
@@ -188,7 +191,7 @@ See [`docs/GUARD.md`](docs/GUARD.md).
 
 ## Release proof: challenge apparently-green work
 
-Version 0.6 adds `antigravity-proof`, an evidence layer for review and release decisions.
+`antigravity-proof` is an evidence layer for review and release decisions.
 
 ### Build one proof artifact
 
@@ -200,20 +203,9 @@ antigravity-proof bundle <task-id> \
   --markdown-out .antigravity/proofs/release.md
 ```
 
-The proof snapshots:
+The proof snapshots objective and acceptance criteria, dependency readiness, decisions and approval receipts, lease history, assumption freshness, invariants, latest verification evidence, evidence age, blast-radius audit, reality-check blockers, Git HEAD, context fingerprint, and a deterministic proof digest.
 
-- objective and acceptance criteria;
-- dependency readiness;
-- settled decisions and active approval receipts;
-- lease state/history;
-- active/expired assumptions and invariants;
-- latest verification result for each named check;
-- evidence age and stale-evidence signals;
-- current blast-radius audit;
-- reality-check blockers/evidence debt;
-- Git HEAD, coordination fingerprint, and a deterministic proof digest.
-
-A non-ready proof exits non-zero. The artifact still explains exactly why it is not ready.
+A non-ready proof exits non-zero but still explains exactly why it is not ready.
 
 ### Counterfactual reviewer
 
@@ -222,9 +214,7 @@ antigravity-proof counterfactual <task-id>
 antigravity-proof counterfactual <task-id> --output counterfactual-review.md
 ```
 
-This prompt deliberately assumes the current green checks are truthful, then asks a reviewer to find ways the release could **still** fail: false-green tests, missing negative cases, wrong assumptions, security boundaries, rollback/migration risk, scope drift, and stale coordination.
-
-Instead of another confidence summary, it requires **falsifiable hypotheses** and the cheapest test that could disprove each one.
+This prompt assumes the current green checks are truthful, then asks how the release could **still** fail: false-green tests, missing negative cases, wrong assumptions, security boundaries, rollback/migration risk, scope drift, and stale coordination. It requires falsifiable hypotheses and the cheapest test that could disprove each one.
 
 ### Redacted reproduction recipe
 
@@ -233,9 +223,81 @@ antigravity-proof repro <task-id>
 antigravity-proof repro <task-id> --json --output repro.json
 ```
 
-The recipe carries changed paths, non-secret assumption names/sources, invariants, acceptance criteria, Git HEAD, and recorded verification command names. It omits assumption values and redacts common credential/token patterns and secret-bearing assignments.
+The recipe carries changed paths, non-secret assumption names/sources, invariants, acceptance criteria, Git HEAD, and recorded verification command names while omitting assumption values and redacting common secret/token patterns.
 
 See [`docs/RELEASE_PROOF.md`](docs/RELEASE_PROOF.md).
+
+## Failure memory: make near-misses reusable
+
+Version 0.7 adds `antigravity-memory`. The objective is not conversational memory; it preserves only failure knowledge that should influence future work.
+
+### Record and recall near-misses
+
+```bash
+antigravity-memory near-miss add <task-id> duplicate-charge \
+  "Retry path could charge twice" \
+  --path src/payments/api.py \
+  --component payments \
+  --risk idempotency \
+  --evidence "staging replay" \
+  --mitigation "persist idempotency keys"
+
+antigravity-memory context <task-id> \
+  --path src/payments/service.py \
+  --component payments \
+  --risk idempotency
+
+antigravity-memory near-miss relevant <task-id>
+```
+
+Near-miss recall is deterministic and local. Matching uses path, component, and risk overlap rather than embeddings or an external model.
+
+### Prove each acceptance criterion has evidence
+
+```bash
+antigravity-memory lineage link <task-id> 1 --type check --ref "pytest -q"
+antigravity-memory lineage link <task-id> 2 --type decision --ref storage
+antigravity-memory lineage report <task-id>
+```
+
+Evidence can reference a passed check, active decision, unexpired assumption, invariant, or recorded observation. Unsupported criteria are reported explicitly and make the command exit non-zero. If criterion text changes, the old evidence link becomes orphaned instead of silently proving the new wording.
+
+### Raise attention on historically risky components
+
+```bash
+antigravity-memory risk <task-id>
+antigravity-memory risk <task-id> --json
+```
+
+Risk memory combines related prior near-misses, failed checks, and guard violations into a deterministic review-attention score. It is a prioritization signal, **not** a failure probability.
+
+### Rehearse rollback before release
+
+```bash
+antigravity-memory rollback record <task-id> \
+  --restore-state "previous application image" \
+  --irreversible "emails already sent cannot be unsent" \
+  --migration "confirm down migration is backward-compatible" \
+  --verify "smoke test login and database reads" \
+  --contain "disable write traffic during rollback"
+
+antigravity-memory rollback packet <task-id> --output rollback.md
+```
+
+The packet always exposes state to restore, irreversible effects, migration/downgrade concerns, verification after rollback, and containment. Missing sections are shown as `UNSPECIFIED` rather than disappearing.
+
+### Promote counterfactual findings into durable controls
+
+```bash
+antigravity-memory promote <task-id> \
+  --finding "Duplicate callback delivery is not covered" \
+  --to verification-template \
+  --check "simulate duplicate callback"
+```
+
+A finding can be promoted into an invariant, an expiring assumption, a verification template, or a project-level near-miss record. This turns skeptical review output into reusable guardrails for later tasks.
+
+See [`docs/MEMORY.md`](docs/MEMORY.md).
 
 ## A practical end-to-end flow
 
@@ -243,6 +305,8 @@ See [`docs/RELEASE_PROOF.md`](docs/RELEASE_PROOF.md).
 GitHub issue / human request
           ↓
 Antigravity task + dependencies
+          ↓
+Relevant prior near-misses + component risk memory
           ↓
 Decisions + exact approval receipts
           ↓
@@ -252,13 +316,15 @@ Assumptions + invariants + change budget
           ↓
 Builder / Codex prompt
           ↓
-Recorded verification + independent review
+Recorded verification + acceptance evidence lineage
           ↓
 Reality check + blast-radius audit
           ↓
-Release proof
+Release proof + rollback rehearsal
           ↓
 Counterfactual review
+          ↓
+Promote useful findings back into failure memory
           ↓
 Human/release system decides whether to ship
 ```
@@ -272,13 +338,14 @@ src/antigravity/
   coordination.py        Decisions, approvals, leases, freshness, reality checks
   guard.py               Assumption TTLs, invariants, Git blast-radius audits
   proof.py               Release proofs, counterfactual prompts, repro recipes
-
+  memory.py              Near-misses, evidence lineage, risk recall, rollback rehearsal
 docs/
   WORKFLOW.md
   GITHUB.md
   COORDINATION.md
   GUARD.md
   RELEASE_PROOF.md
+  MEMORY.md
 AGENTS.example.md
 templates/
 examples/
@@ -296,11 +363,12 @@ tests/
 - network integrations remain explicit and optional;
 - coordination state survives chat/session boundaries;
 - stale evidence, stale facts, and scope creep become visible before release;
-- reviewers can challenge green evidence rather than simply trusting it.
+- reviewers can challenge green evidence rather than simply trusting it;
+- useful failures and near-misses become reusable project memory instead of disappearing with a closed PR.
 
 ## Non-goals
 
-Antigravity is not a secret manager, operating-system permission system, autonomous deployment platform, or replacement for CI/CD. Approval receipts, leases, protected paths, proof bundles, and change budgets are governance/evidence mechanisms, not security boundaries or correctness guarantees.
+Antigravity is not a secret manager, operating-system permission system, autonomous deployment platform, statistical risk predictor, or replacement for CI/CD. Approval receipts, leases, protected paths, proof bundles, failure-memory scores, and change budgets are governance/evidence mechanisms, not security boundaries or correctness guarantees.
 
 ## Contributing
 
