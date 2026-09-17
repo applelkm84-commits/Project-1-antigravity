@@ -40,11 +40,18 @@
 - [x] Deterministic proof digest plus machine-readable and human-readable artifacts
 
 ## 0.7 — Failure memory and evidence lineage
-- [ ] Near-miss ledger that records blockers caught before release and re-surfaces relevant prior failure patterns on later tasks
-- [ ] Acceptance-criterion evidence map that exposes criteria with no supporting check, decision, invariant, or observation
-- [ ] Change-risk memory keyed by paths/components so repeat trouble spots receive stronger review prompts automatically
-- [ ] Rollback rehearsal packet that asks what must be restored, preserved, or migrated before a risky release
-- [ ] Counterfactual findings that can be promoted into reusable invariants, assumptions, or verification templates instead of disappearing in chat
+- [x] Project-level near-miss ledger with deterministic path/component/risk recall
+- [x] Acceptance-criterion evidence lineage with explicit unsupported/orphaned criterion reporting
+- [x] Component/path risk memory combining prior near-misses, failed checks, and guard violations
+- [x] Rollback rehearsal packet covering restoration, irreversible effects, downgrade concerns, post-rollback verification, and containment
+- [x] Counterfactual findings promotable into invariants, expiring assumptions, verification templates, or near-miss records
+
+## 0.8 — Policy inheritance and preflight planning
+- [ ] Reusable repository/workspace policy profiles for common task classes without copying long prompts
+- [ ] Deterministic preflight planner that recommends checks, invariants, rollback questions, and blast-radius policy from local failure history
+- [ ] Conflict detector for contradictory active decisions, assumptions, and approval scopes across related tasks
+- [ ] Proof-to-proof delta showing exactly what evidence changed between two release candidates
+- [ ] Local release gate profiles that compose lineage, guard, memory, proof, and rollback requirements without a hosted policy engine
 
 ## Principles
 Roadmap items must preserve Antigravity's local-first, low-dependency design. Networked integrations should remain optional and must never require users to expose private prompts, source code, or credentials to the core CLI.
