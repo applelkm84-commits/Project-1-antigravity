@@ -14,6 +14,21 @@ Useful reports include the affected version, reproduction conditions, impact, an
 
 Antigravity is designed to remain local and file-based. The core CLI should not require network access, collect telemetry, execute generated shell commands, or read credentials. Changes that alter these properties require explicit documentation and review.
 
+## Failure memory is operational context, not a risk oracle
+
+`antigravity-memory` stores project-level near-misses in `.antigravity/memory.json` and task-level evidence/rollback state in the normal Antigravity task state.
+
+- near-miss matching is deterministic path/component/risk overlap; it does not infer semantic similarity or calculate a statistical probability of failure;
+- component-risk scores prioritize review attention only and must not be treated as actuarial, security, or reliability probabilities;
+- evidence-lineage links show which recorded evidence currently resolves for a criterion, but they do not prove that the criterion itself is sufficient or correctly written;
+- failed checks and expired assumptions do not count as valid supporting evidence;
+- changed criterion text does not silently inherit evidence linked to the previous wording;
+- rollback rehearsal is planning only and never executes rollback commands;
+- counterfactual promotion records a human/agent finding as durable project state, so the finding should be reviewed before promotion;
+- `.antigravity/memory.json` can contain operational details, paths, incidents, mitigations, and evidence. Review it before publishing or sharing a repository if those details are sensitive.
+
+Do not put credentials, customer secrets, production tokens, or sensitive incident payloads into near-miss evidence or rollback notes.
+
 ## Release proof is evidence, not a certificate
 
 `antigravity-proof` aggregates existing local state and Git evidence into review artifacts. A green proof does not certify that code is correct, secure, authorized, or safe to deploy.
